@@ -17,7 +17,10 @@ import {
     User,
     Mail,
     Phone,
-    BookOpen
+    BookOpen,
+    Search,
+    X,
+    Filter
 } from 'lucide-react';
 import { useNotification } from '../../contexts/NotificationContext';
 import api from '../../services/api';
@@ -33,13 +36,77 @@ const TestDetailsView = ({
 }) => {
     const attempts = testAttempts[test.test_id] || [];
     
-    // Calculate additional analytics
-    const totalStudents = attempts.length;
-    const passedStudents = attempts.filter(student => student.highest_score >= 50).length;
+    // Filter states
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedCampus, setSelectedCampus] = useState('all');
+    const [selectedCourse, setSelectedCourse] = useState('all');
+    const [selectedBatch, setSelectedBatch] = useState('all');
+    
+    // Extract unique values for filters
+    const uniqueCampuses = [...new Set(attempts.map(student => student.campus_name).filter(Boolean))];
+    const uniqueCourses = [...new Set(attempts.map(student => student.course_name).filter(Boolean))];
+    const uniqueBatches = [...new Set(attempts.map(student => student.batch_name).filter(Boolean))];
+    
+    // Auto-select single values
+    useEffect(() => {
+        if (uniqueCampuses.length === 1) {
+            setSelectedCampus(uniqueCampuses[0]);
+        }
+        if (uniqueCourses.length === 1) {
+            setSelectedCourse(uniqueCourses[0]);
+        }
+        if (uniqueBatches.length === 1) {
+            setSelectedBatch(uniqueBatches[0]);
+        }
+    }, [uniqueCampuses, uniqueCourses, uniqueBatches]);
+    
+    // Filter students based on all criteria
+    const filteredAttempts = attempts.filter(student => {
+        // Search filter
+        const searchLower = searchTerm.toLowerCase();
+        const matchesSearch = !searchTerm || 
+            student.student_name?.toLowerCase().includes(searchLower) ||
+            student.student_email?.toLowerCase().includes(searchLower) ||
+            student.roll_number?.toLowerCase().includes(searchLower) ||
+            student.campus_name?.toLowerCase().includes(searchLower) ||
+            student.course_name?.toLowerCase().includes(searchLower) ||
+            student.batch_name?.toLowerCase().includes(searchLower);
+        
+        // Campus filter
+        const matchesCampus = selectedCampus === 'all' || student.campus_name === selectedCampus;
+        
+        // Course filter
+        const matchesCourse = selectedCourse === 'all' || student.course_name === selectedCourse;
+        
+        // Batch filter
+        const matchesBatch = selectedBatch === 'all' || student.batch_name === selectedBatch;
+        
+        return matchesSearch && matchesCampus && matchesCourse && matchesBatch;
+    });
+    
+    // Calculate analytics based on filtered data
+    const totalStudents = filteredAttempts.length;
+    const passedStudents = filteredAttempts.filter(student => student.highest_score >= 50).length;
     const failedStudents = totalStudents - passedStudents;
-    const averageTime = attempts.length > 0 
-        ? (attempts.reduce((sum, student) => sum + (student.average_time || 0), 0) / attempts.length).toFixed(1)
+    const averageTime = filteredAttempts.length > 0 
+        ? (filteredAttempts.reduce((sum, student) => sum + (student.average_time || 0), 0) / filteredAttempts.length).toFixed(1)
         : 0;
+    
+    // Reset all filters
+    const resetFilters = () => {
+        setSearchTerm('');
+        setSelectedCampus(uniqueCampuses.length === 1 ? uniqueCampuses[0] : 'all');
+        setSelectedCourse(uniqueCourses.length === 1 ? uniqueCourses[0] : 'all');
+        setSelectedBatch(uniqueBatches.length === 1 ? uniqueBatches[0] : 'all');
+    };
+    
+    // Get active filter count
+    const activeFiltersCount = [
+        searchTerm,
+        selectedCampus !== 'all' && uniqueCampuses.length > 1,
+        selectedCourse !== 'all' && uniqueCourses.length > 1,
+        selectedBatch !== 'all' && uniqueBatches.length > 1
+    ].filter(Boolean).length;
     
     return (
         <div className="space-y-6">
@@ -130,6 +197,124 @@ const TestDetailsView = ({
                 </motion.div>
             </div>
 
+            {/* Filters and Search Section */}
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+                <div className="flex flex-col lg:flex-row gap-4 mb-4">
+                    {/* Search Bar */}
+                    <div className="flex-1">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                            <input
+                                type="text"
+                                placeholder="Search students by name, email, roll number, campus, course, or batch..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                            {searchTerm && (
+                                <button
+                                    onClick={() => setSearchTerm('')}
+                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Filter Controls */}
+                    <div className="flex flex-wrap gap-3">
+                        {/* Campus Filter */}
+                        <div className="flex flex-col">
+                            <label className="text-sm font-medium text-gray-700 mb-1">Campus</label>
+                            <select
+                                value={selectedCampus}
+                                onChange={(e) => setSelectedCampus(e.target.value)}
+                                disabled={uniqueCampuses.length <= 1}
+                                className={`px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                    uniqueCampuses.length <= 1 ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                                }`}
+                            >
+                                {uniqueCampuses.length > 1 && <option value="all">All Campuses</option>}
+                                {uniqueCampuses.map(campus => (
+                                    <option key={campus} value={campus}>{campus}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Course Filter */}
+                        <div className="flex flex-col">
+                            <label className="text-sm font-medium text-gray-700 mb-1">Course</label>
+                            <select
+                                value={selectedCourse}
+                                onChange={(e) => setSelectedCourse(e.target.value)}
+                                disabled={uniqueCourses.length <= 1}
+                                className={`px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                    uniqueCourses.length <= 1 ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                                }`}
+                            >
+                                {uniqueCourses.length > 1 && <option value="all">All Courses</option>}
+                                {uniqueCourses.map(course => (
+                                    <option key={course} value={course}>{course}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Batch Filter */}
+                        <div className="flex flex-col">
+                            <label className="text-sm font-medium text-gray-700 mb-1">Batch</label>
+                            <select
+                                value={selectedBatch}
+                                onChange={(e) => setSelectedBatch(e.target.value)}
+                                disabled={uniqueBatches.length <= 1}
+                                className={`px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                    uniqueBatches.length <= 1 ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                                }`}
+                            >
+                                {uniqueBatches.length > 1 && <option value="all">All Batches</option>}
+                                {uniqueBatches.map(batch => (
+                                    <option key={batch} value={batch}>{batch}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Reset Filters Button */}
+                        {activeFiltersCount > 0 && (
+                            <div className="flex flex-col justify-end">
+                                <button
+                                    onClick={resetFilters}
+                                    className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                                >
+                                    <RefreshCw className="w-4 h-4" />
+                                    Reset Filters
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Filter Status */}
+                <div className="flex items-center justify-between text-sm text-gray-600">
+                    <div className="flex items-center gap-4">
+                        <span>
+                            Showing <span className="font-semibold text-gray-900">{totalStudents}</span> of{' '}
+                            <span className="font-semibold text-gray-900">{attempts.length}</span> students
+                        </span>
+                        {activeFiltersCount > 0 && (
+                            <span className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
+                                <Filter className="w-3 h-3" />
+                                {activeFiltersCount} filter{activeFiltersCount > 1 ? 's' : ''} active
+                            </span>
+                        )}
+                    </div>
+                    {searchTerm && (
+                        <div className="text-gray-500">
+                            Search results for: <span className="font-medium">"{searchTerm}"</span>
+                        </div>
+                    )}
+                </div>
+            </div>
+
             {/* Student Attempts Section */}
             <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
                 <div className="p-6 border-b border-gray-200">
@@ -167,11 +352,26 @@ const TestDetailsView = ({
                 </div>
 
                 <div className="overflow-x-auto">
-                    {attempts.length === 0 ? (
+                    {filteredAttempts.length === 0 ? (
                         <div className="text-center py-12">
                             <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                            <h3 className="text-lg font-medium text-gray-900 mb-2">No attempts found</h3>
-                            <p className="text-gray-500">No students have attempted this test yet.</p>
+                            <h3 className="text-lg font-medium text-gray-900 mb-2">
+                                {attempts.length === 0 ? 'No attempts found' : 'No students match the current filters'}
+                            </h3>
+                            <p className="text-gray-500">
+                                {attempts.length === 0 
+                                    ? 'No students have attempted this test yet.' 
+                                    : 'Try adjusting your search or filter criteria.'
+                                }
+                            </p>
+                            {attempts.length > 0 && activeFiltersCount > 0 && (
+                                <button
+                                    onClick={resetFilters}
+                                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                >
+                                    Clear All Filters
+                                </button>
+                            )}
                         </div>
                     ) : (
                         <table className="w-full">
@@ -213,7 +413,7 @@ const TestDetailsView = ({
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {attempts.map((student, studentIndex) => (
+                                {filteredAttempts.map((student, studentIndex) => (
                                     <motion.tr
                                         key={student.student_id}
                                         initial={{ opacity: 0, x: -20 }}
