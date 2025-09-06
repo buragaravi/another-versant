@@ -115,7 +115,7 @@ def create_mcq_test():
             'success': True,
             'message': 'MCQ test created successfully',
             'data': {
-                'test_id': test_id
+                'test_id': str(result.inserted_id)
             }
         }), 201
 

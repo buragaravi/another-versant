@@ -128,7 +128,7 @@ def create_technical_test():
             'success': True,
             'message': 'Technical test created successfully',
             'data': {
-                'test_id': test_id,
+                'test_id': str(result.inserted_id),
                 'question_count': len(processed_questions)
             }
         }), 201

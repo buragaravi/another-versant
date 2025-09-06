@@ -26,6 +26,10 @@ const OnlineExamTaking = () => {
   const [timerWarning, setTimerWarning] = useState(false);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const timerRef = useRef(null);
+  const [recordings, setRecordings] = useState({});
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingQuestionId, setRecordingQuestionId] = useState(null);
+  const [audioURLs, setAudioURLs] = useState({});
 
   useEffect(() => {
     const fetchExam = async () => {
@@ -174,8 +178,12 @@ const OnlineExamTaking = () => {
       if (examId) {
         localStorage.removeItem(`exam_timer_${examId}`);
       }
+      // Stop any ongoing recording
+      if (window.currentMediaRecorder && isRecording) {
+        window.currentMediaRecorder.stop();
+      }
     };
-  }, [examId]);
+  }, [examId, isRecording]);
 
   useEffect(() => {
     if (!loading && questions.length > 0 && !startTime) {
@@ -240,6 +248,44 @@ const OnlineExamTaking = () => {
     setAnswers(prev => ({ ...prev, [questionId]: answer }));
   };
 
+  // Audio recording functionality for listening modules
+  const startRecording = async (questionId) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      const audioChunks = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        audioChunks.push(event.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        setRecordings(prev => ({ ...prev, [questionId]: audioBlob }));
+        setAudioURLs(prev => ({ ...prev, [questionId]: audioUrl }));
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingQuestionId(questionId);
+      
+      // Store the media recorder for stopping
+      window.currentMediaRecorder = mediaRecorder;
+    } catch (err) {
+      showError('Failed to access microphone. Please check permissions.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (window.currentMediaRecorder && isRecording) {
+      window.currentMediaRecorder.stop();
+      setIsRecording(false);
+      setRecordingQuestionId(null);
+    }
+  };
+
   const handleSubmit = async () => {
     try {
       // Stop the timer
@@ -251,7 +297,32 @@ const OnlineExamTaking = () => {
       const endTime = Date.now();
       const timeTakenMs = startTime ? endTime - startTime : null;
 
-      if (assignmentId) {
+      // Check if this is a listening module that requires audio submission
+      const isListeningModule = exam?.module_id === 'LISTENING' || exam?.module_id === 'SPEAKING';
+      
+      if (isListeningModule) {
+        // Submit using FormData for listening modules with audio recordings
+        console.log('Submitting listening module with audio recordings');
+        const formData = new FormData();
+        formData.append('test_id', examId);
+        Object.entries(answers).forEach(([qid, ans]) => {
+          formData.append(`answer_${qid}`, ans);
+        });
+        Object.entries(recordings).forEach(([qid, blob]) => {
+          formData.append(`question_${qid}`, blob, `answer_${qid}.wav`);
+        });
+        
+        const res = await api.post('/student/submit-practice-test', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        
+        if (res.data.success) {
+          success('Exam submitted successfully!');
+          navigate('/student/history');
+        } else {
+          showError(res.data.message || 'Failed to submit your answers.');
+        }
+      } else if (assignmentId) {
         // Submit using random assignment endpoint
         console.log('Submitting via random assignment endpoint with assignment_id:', assignmentId);
         const payload = {
@@ -305,6 +376,8 @@ const OnlineExamTaking = () => {
   if (!exam) return <div className="text-center p-8">Exam not found or unavailable.</div>;
   if (questions.length === 0) return <div className="text-center p-8">This exam has no questions.</div>;
 
+  const currentQuestion = questions[currentQuestionIndex];
+
   // Debug logging
   console.log('Exam state:', {
     autoSubmitted,
@@ -312,10 +385,10 @@ const OnlineExamTaking = () => {
     timeRemaining,
     examDuration,
     cheatCount,
-    questionsLength: questions.length
+    questionsLength: questions.length,
+    examModuleId: exam?.module_id,
+    currentQuestion: currentQuestion
   });
-
-  const currentQuestion = questions[currentQuestionIndex];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
@@ -430,14 +503,14 @@ const OnlineExamTaking = () => {
             className="mb-8"
           >
             <div className="flex justify-between text-sm text-slate-600 mb-3">
-              <span className="font-medium">Progress: {Object.keys(answers).length} / {questions.length} answered</span>
-              <span className="font-semibold text-slate-700">{Math.round((Object.keys(answers).length / questions.length) * 100)}%</span>
+              <span className="font-medium">Progress: {Object.keys({...answers, ...recordings}).length} / {questions.length} answered</span>
+              <span className="font-semibold text-slate-700">{Math.round((Object.keys({...answers, ...recordings}).length / questions.length) * 100)}%</span>
             </div>
             <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
               <motion.div 
                 className="bg-gradient-to-r from-blue-500 to-indigo-500 h-3 rounded-full shadow-sm"
                 initial={{ width: 0 }}
-                animate={{ width: `${(Object.keys(answers).length / questions.length) * 100}%` }}
+                animate={{ width: `${(Object.keys({...answers, ...recordings}).length / questions.length) * 100}%` }}
                 transition={{ duration: 0.8, ease: "easeOut" }}
               />
             </div>
@@ -462,6 +535,35 @@ const OnlineExamTaking = () => {
                   >
                     {currentQuestion.question}
                   </motion.h3>
+
+                  {/* Debug info - remove this in production */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <div className="bg-gray-100 p-4 rounded-lg mb-4 text-xs">
+                      <strong>Debug Info:</strong><br/>
+                      Question Type: {currentQuestion.question_type || 'undefined'}<br/>
+                      Audio URL: {currentQuestion.audio_url || 'undefined'}<br/>
+                      Module ID: {exam?.module_id || 'undefined'}<br/>
+                      Question ID: {currentQuestion.question_id || 'undefined'}
+                    </div>
+                  )}
+
+                  {/* Audio playback for listening modules */}
+                  {(currentQuestion.question_type === 'audio' || currentQuestion.audio_url) && (
+                    <motion.div 
+                      className="mb-8 text-center"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.5, delay: 0.4 }}
+                    >
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                        <p className="text-blue-700 font-semibold mb-2">Listen to the audio:</p>
+                        <audio controls className="mx-auto w-full max-w-md">
+                          <source src={currentQuestion.audio_url} type="audio/mpeg" />
+                          Your browser does not support the audio element.
+                        </audio>
+                      </div>
+                    </motion.div>
+                  )}
                   
                   {currentQuestion.question_type === 'mcq' && (
                     <motion.div 
@@ -516,6 +618,198 @@ const OnlineExamTaking = () => {
                     </motion.div>
                   )}
 
+                  {/* Audio recording interface for listening modules */}
+                  {(currentQuestion.question_type === 'audio' || currentQuestion.audio_url || exam?.module_id === 'LISTENING' || exam?.module_id === 'SPEAKING') && (
+                    <motion.div 
+                      className="space-y-6"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.6, delay: 0.5 }}
+                    >
+                      <div className="text-center">
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                          <h4 className="text-lg font-semibold text-yellow-800 mb-2">Instructions for Listening Module:</h4>
+                          <p className="text-yellow-700">
+                            1. Listen to the audio above carefully<br/>
+                            2. Click "Start Recording" to record your response<br/>
+                            3. Speak clearly into your microphone<br/>
+                            4. Click "Stop Recording" when finished<br/>
+                            5. You can also type your response below (optional)
+                          </p>
+                        </div>
+                        
+                        {/* Recording Controls */}
+                        <div className="flex justify-center space-x-4 mb-6">
+                          {!isRecording ? (
+                            <motion.button
+                              onClick={() => startRecording(currentQuestion.question_id)}
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              className="px-6 py-3 bg-red-500 text-white rounded-2xl font-semibold hover:bg-red-600 transition-all duration-300 shadow-lg flex items-center"
+                            >
+                              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+                              </svg>
+                              Start Recording
+                            </motion.button>
+                          ) : (
+                            <motion.button
+                              onClick={stopRecording}
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              className="px-6 py-3 bg-gray-500 text-white rounded-2xl font-semibold hover:bg-gray-600 transition-all duration-300 shadow-lg flex items-center"
+                            >
+                              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                              Stop Recording
+                            </motion.button>
+                          )}
+                        </div>
+
+                        {/* Recording Status */}
+                        {isRecording && recordingQuestionId === currentQuestion.question_id && (
+                          <motion.div 
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg mb-4"
+                          >
+                            <div className="flex items-center justify-center">
+                              <div className="w-3 h-3 bg-red-500 rounded-full mr-2 animate-pulse"></div>
+                              Recording in progress...
+                            </div>
+                          </motion.div>
+                        )}
+
+                        {/* Playback of recorded audio */}
+                        {audioURLs[currentQuestion.question_id] && (
+                          <motion.div 
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4"
+                          >
+                            <p className="text-green-700 font-semibold mb-2">Your Recording:</p>
+                            <audio controls className="w-full">
+                              <source src={audioURLs[currentQuestion.question_id]} type="audio/wav" />
+                              Your browser does not support the audio element.
+                            </audio>
+                          </motion.div>
+                        )}
+
+                        {/* Text input for listening modules */}
+                        <div className="mt-6">
+                          <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Type your response (optional):
+                          </label>
+                          <textarea
+                            value={answers[currentQuestion.question_id] || ''}
+                            onChange={(e) => handleAnswerChange(currentQuestion.question_id, e.target.value)}
+                            className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                            rows={4}
+                            placeholder="Type your response here..."
+                            disabled={autoSubmitted}
+                          />
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Fallback: Show recording interface for any question with audio_url or listening module */}
+                  {(!currentQuestion.question_type && currentQuestion.audio_url) || (exam?.module_id === 'LISTENING' && !currentQuestion.question_type) && (
+                    <motion.div 
+                      className="space-y-6"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.6, delay: 0.5 }}
+                    >
+                      <div className="text-center">
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                          <h4 className="text-lg font-semibold text-yellow-800 mb-2">Instructions for Listening Module:</h4>
+                          <p className="text-yellow-700">
+                            1. Listen to the audio above carefully<br/>
+                            2. Click "Start Recording" to record your response<br/>
+                            3. Speak clearly into your microphone<br/>
+                            4. Click "Stop Recording" when finished<br/>
+                            5. You can also type your response below (optional)
+                          </p>
+                        </div>
+                        
+                        {/* Recording Controls */}
+                        <div className="flex justify-center space-x-4 mb-6">
+                          {!isRecording ? (
+                            <motion.button
+                              onClick={() => startRecording(currentQuestion.question_id)}
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              className="px-6 py-3 bg-red-500 text-white rounded-2xl font-semibold hover:bg-red-600 transition-all duration-300 shadow-lg flex items-center"
+                            >
+                              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+                              </svg>
+                              Start Recording
+                            </motion.button>
+                          ) : (
+                            <motion.button
+                              onClick={stopRecording}
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              className="px-6 py-3 bg-gray-500 text-white rounded-2xl font-semibold hover:bg-gray-600 transition-all duration-300 shadow-lg flex items-center"
+                            >
+                              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                              Stop Recording
+                            </motion.button>
+                          )}
+                        </div>
+
+                        {/* Recording Status */}
+                        {isRecording && recordingQuestionId === currentQuestion.question_id && (
+                          <motion.div 
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg mb-4"
+                          >
+                            <div className="flex items-center justify-center">
+                              <div className="w-3 h-3 bg-red-500 rounded-full mr-2 animate-pulse"></div>
+                              Recording in progress...
+                            </div>
+                          </motion.div>
+                        )}
+
+                        {/* Playback of recorded audio */}
+                        {audioURLs[currentQuestion.question_id] && (
+                          <motion.div 
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4"
+                          >
+                            <p className="text-green-700 font-semibold mb-2">Your Recording:</p>
+                            <audio controls className="w-full">
+                              <source src={audioURLs[currentQuestion.question_id]} type="audio/wav" />
+                              Your browser does not support the audio element.
+                            </audio>
+                          </motion.div>
+                        )}
+
+                        {/* Text input for listening modules */}
+                        <div className="mt-6">
+                          <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Type your response (optional):
+                          </label>
+                          <textarea
+                            value={answers[currentQuestion.question_id] || ''}
+                            onChange={(e) => handleAnswerChange(currentQuestion.question_id, e.target.value)}
+                            className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                            rows={4}
+                            placeholder="Type your response here..."
+                            disabled={autoSubmitted}
+                          />
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
                   {/* Navigation Buttons */}
                   <motion.div 
                     className="flex justify-between mt-10"
@@ -538,7 +832,7 @@ const OnlineExamTaking = () => {
                     {currentQuestionIndex === questions.length - 1 ? (
                       <motion.button
                         onClick={handleSubmit}
-                        disabled={Object.keys(answers).length !== questions.length || autoSubmitted}
+                        disabled={Object.keys({...answers, ...recordings}).length !== questions.length || autoSubmitted}
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         className={`px-8 py-3 border-2 border-transparent text-sm font-medium rounded-2xl shadow-lg text-white flex items-center transition-all duration-300 ${
@@ -602,7 +896,7 @@ const OnlineExamTaking = () => {
                       className={`w-12 h-12 rounded-2xl text-sm font-medium transition-all duration-300 shadow-lg ${
                         index === currentQuestionIndex
                           ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-blue-200'
-                          : answers[questions[index]?.question_id]
+                          : answers[questions[index]?.question_id] || recordings[questions[index]?.question_id]
                           ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 border-2 border-green-300 hover:shadow-green-200'
                           : 'bg-white text-slate-700 border-2 border-slate-200 hover:bg-gradient-to-r hover:from-slate-50 hover:to-blue-50 hover:border-blue-300'
                       }`}
