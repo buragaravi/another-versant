@@ -215,7 +215,7 @@ const PracticeModules = () => {
 
   useEffect(() => {
     if (!user || !user._id) return;
-    const socket = io(import.meta.env.VITE_SOCKET_IO_URL || 'https://ai-versant.onrender.com', {
+    const socket = io(import.meta.env.VITE_SOCKET_IO_URL || 'https://another-versant.onrender.com/', {
       transports: ['websocket'],
       auth: { token: localStorage.getItem('token') },
     });

@@ -8,7 +8,7 @@ import time
 def test_external_ip_performance():
     """Test performance using external IP"""
     # Use external IP instead of localhost
-    base_url = "https://ai-versant.onrender.com"  # Your main server
+    base_url = "https://another-versant.onrender.com/"  # Your main server
     minimal_url = "http://192.168.3.189:5001"  # Minimal server
     
     print("🚀 Testing Performance with External IP")

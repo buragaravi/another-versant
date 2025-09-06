@@ -184,7 +184,7 @@ def test_unix_scalability(base_url):
 def main():
     """Main function for Unix performance testing"""
     # Use external IP to avoid localhost issues
-    base_url = "https://ai-versant.onrender.com"
+    base_url = "https://another-versant.onrender.com/"
     
     print("🐧 Unix/Linux VERSANT Backend Performance Test")
     print("=" * 60)

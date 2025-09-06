@@ -11,7 +11,7 @@ def test_cors_configuration():
     
     # Test URLs
 
-    base_url = "https://ai-versant.onrender.com"
+    base_url = "https://another-versant.onrender.com/"
 
     test_urls = [
         f"{base_url}/",

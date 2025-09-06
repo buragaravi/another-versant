@@ -235,7 +235,7 @@ class UltraPerformanceTester:
 async def main():
     """Main function to run the ultra performance test"""
     # Test your Render.com URL
-    base_url = "https://ai-versant.onrender.com"
+    base_url = "https://another-versant.onrender.com/"
     
     tester = UltraPerformanceTester(base_url)
     results = await tester.run_comprehensive_test()

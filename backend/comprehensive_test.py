@@ -144,12 +144,12 @@ def run_comprehensive_test():
     # Test configurations
     test_configs = [
         {
-            'url': 'https://ai-versant.onrender.com',
+            'url': 'https://another-versant.onrender.com/',
             'name': 'Production Server (Waitress)',
             'port': 5000
         },
         {
-            'url': 'https://ai-versant.onrender.com', 
+            'url': 'https://another-versant.onrender.com/', 
             'name': 'Main Application (SocketIO)',
             'port': 8000
         }
