@@ -22,6 +22,257 @@ import {
 import { useNotification } from '../../contexts/NotificationContext';
 import api from '../../services/api';
 
+// Test Details View Component
+const TestDetailsView = ({ 
+    test, 
+    testAttempts, 
+    onBack, 
+    onStudentClick, 
+    onExportTestResults, 
+    exportLoading 
+}) => {
+    const attempts = testAttempts[test.test_id] || [];
+    
+    // Calculate additional analytics
+    const totalStudents = attempts.length;
+    const passedStudents = attempts.filter(student => student.highest_score >= 50).length;
+    const failedStudents = totalStudents - passedStudents;
+    const averageTime = attempts.length > 0 
+        ? (attempts.reduce((sum, student) => sum + (student.average_time || 0), 0) / attempts.length).toFixed(1)
+        : 0;
+    
+    return (
+        <div className="space-y-6">
+            {/* Header with Back Button */}
+            <div className="flex items-center gap-4">
+                <button
+                    onClick={onBack}
+                    className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                    <ChevronDown className="w-4 h-4 rotate-90" />
+                    Back to Tests
+                </button>
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-900">{test.test_name}</h1>
+                    <p className="text-gray-600">Detailed analysis and student performance</p>
+                </div>
+            </div>
+
+            {/* Analytics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-6"
+                >
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-gray-600">Total Students</p>
+                            <p className="text-3xl font-bold text-gray-900">{totalStudents}</p>
+                        </div>
+                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                            <Users className="w-6 h-6 text-blue-600" />
+                        </div>
+                    </div>
+                </motion.div>
+
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-6"
+                >
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-gray-600">Pass Rate</p>
+                            <p className="text-3xl font-bold text-green-600">
+                                {totalStudents > 0 ? ((passedStudents / totalStudents) * 100).toFixed(1) : 0}%
+                            </p>
+                        </div>
+                        <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                            <CheckCircle className="w-6 h-6 text-green-600" />
+                        </div>
+                    </div>
+                </motion.div>
+
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-6"
+                >
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-gray-600">Average Score</p>
+                            <p className="text-3xl font-bold text-blue-600">{test.average_score}%</p>
+                        </div>
+                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                            <TrendingUp className="w-6 h-6 text-blue-600" />
+                        </div>
+                    </div>
+                </motion.div>
+
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-6"
+                >
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-gray-600">Highest Score</p>
+                            <p className="text-3xl font-bold text-purple-600">{test.highest_score}%</p>
+                        </div>
+                        <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                            <BarChart3 className="w-6 h-6 text-purple-600" />
+                        </div>
+                    </div>
+                </motion.div>
+            </div>
+
+            {/* Student Attempts Section */}
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                <div className="p-6 border-b border-gray-200">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-xl font-semibold text-gray-900">
+                            Student Attempts ({totalStudents} students)
+                        </h2>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => onExportTestResults(test.test_id, test.test_name, 'excel')}
+                                disabled={exportLoading}
+                                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                            >
+                                {exportLoading ? (
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <FileSpreadsheet className="w-4 h-4" />
+                                )}
+                                Export Excel
+                            </button>
+                            <button
+                                onClick={() => onExportTestResults(test.test_id, test.test_name, 'csv')}
+                                disabled={exportLoading}
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                            >
+                                {exportLoading ? (
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <Download className="w-4 h-4" />
+                                )}
+                                Export CSV
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                    {attempts.length === 0 ? (
+                        <div className="text-center py-12">
+                            <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                            <h3 className="text-lg font-medium text-gray-900 mb-2">No attempts found</h3>
+                            <p className="text-gray-500">No students have attempted this test yet.</p>
+                        </div>
+                    ) : (
+                        <table className="w-full">
+                            <thead className="bg-gray-50 border-b border-gray-200">
+                                <tr>
+                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Student Name
+                                    </th>
+                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Email
+                                    </th>
+                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Campus
+                                    </th>
+                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Course
+                                    </th>
+                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Batch
+                                    </th>
+                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Total Questions
+                                    </th>
+                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Correct Answers
+                                    </th>
+                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Score
+                                    </th>
+                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Attempts
+                                    </th>
+                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Latest Attempt
+                                    </th>
+                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Actions
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {attempts.map((student, studentIndex) => (
+                                    <motion.tr
+                                        key={student.student_id}
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: studentIndex * 0.05 }}
+                                        className="hover:bg-gray-50 cursor-pointer"
+                                        onClick={() => onStudentClick(student.student_id, test.test_id)}
+                                    >
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex items-center">
+                                                <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold mr-3">
+                                                    {student.student_name?.charAt(0)?.toUpperCase() || 'S'}
+                                                </div>
+                                                <div className="text-sm font-medium text-gray-900">
+                                                    {student.student_name}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            {student.student_email}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            {student.campus_name}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            {student.course_name}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            {student.batch_name}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            {student.total_questions}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            {student.correct_answers}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
+                                            {student.highest_score.toFixed(1)}%
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            {student.attempts_count}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            {student.latest_attempt ? new Date(student.latest_attempt).toLocaleDateString() : 'N/A'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            <Eye className="w-4 h-4" />
+                                        </td>
+                                    </motion.tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const ResultsManagement = () => {
     const [loading, setLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState("");
@@ -32,6 +283,8 @@ const ResultsManagement = () => {
     const [studentAttemptDetails, setStudentAttemptDetails] = useState(null);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [exportLoading, setExportLoading] = useState(false);
+    const [currentView, setCurrentView] = useState('list'); // 'list' or 'test-details'
+    const [selectedTest, setSelectedTest] = useState(null);
     const { error, success } = useNotification();
 
     useEffect(() => {
@@ -78,14 +331,20 @@ const ResultsManagement = () => {
     };
 
     const handleTestClick = async (testId) => {
-        if (expandedTest === testId) {
-            setExpandedTest(null);
-        } else {
-            setExpandedTest(testId);
+        const test = tests.find(t => t.test_id === testId);
+        if (test) {
+            setSelectedTest(test);
+            setCurrentView('test-details');
             if (!testAttempts[testId]) {
                 await fetchTestAttempts(testId);
             }
         }
+    };
+
+    const handleBackToList = () => {
+        setCurrentView('list');
+        setSelectedTest(null);
+        setExpandedTest(null);
     };
 
     const handleStudentClick = async (studentId, testId) => {
@@ -163,17 +422,28 @@ const ResultsManagement = () => {
         <>
             <main className="px-6 lg:px-10 py-12">
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    {/* Header */}
-                    <div className="flex justify-between items-center mb-8">
-                        <div>
-                            <h1 className="text-3xl font-bold text-gray-900">
-                                Online Tests Overview
-                            </h1>
-                            <p className="mt-2 text-gray-600">
-                                Click on a test to view student attempts and detailed results
-                            </p>
-                        </div>
-                    </div>
+                    {currentView === 'test-details' && selectedTest ? (
+                        <TestDetailsView
+                            test={selectedTest}
+                            testAttempts={testAttempts}
+                            onBack={handleBackToList}
+                            onStudentClick={handleStudentClick}
+                            onExportTestResults={handleExportTestResults}
+                            exportLoading={exportLoading}
+                        />
+                    ) : (
+                        <>
+                            {/* Header */}
+                            <div className="flex justify-between items-center mb-8">
+                                <div>
+                                    <h1 className="text-3xl font-bold text-gray-900">
+                                        Online Tests Overview
+                                    </h1>
+                                    <p className="mt-2 text-gray-600">
+                                        Click on a test to view student attempts and detailed results
+                                    </p>
+                                </div>
+                            </div>
 
                     {/* Error Message */}
                     {errorMsg && (
@@ -221,213 +491,53 @@ const ResultsManagement = () => {
                                         </tr>
                                     ) : (
                                         tests.map((test, index) => (
-                                            <React.Fragment key={test.test_id}>
-                                                <motion.tr
-                                                    initial={{ opacity: 0, y: 20 }}
-                                                    animate={{ opacity: 1, y: 0 }}
-                                                    transition={{ delay: index * 0.1 }}
-                                                    className="hover:bg-gray-50 cursor-pointer"
-                                                    onClick={() => handleTestClick(test.test_id)}
-                                                >
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <div className="flex items-center">
-                                                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold mr-3">
-                                                                {test.test_name?.charAt(0)?.toUpperCase() || 'T'}
+                                            <motion.tr
+                                                key={test.test_id}
+                                                initial={{ opacity: 0, y: 20 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: index * 0.1 }}
+                                                className="hover:bg-gray-50 cursor-pointer"
+                                                onClick={() => handleTestClick(test.test_id)}
+                                            >
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="flex items-center">
+                                                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold mr-3">
+                                                            {test.test_name?.charAt(0)?.toUpperCase() || 'T'}
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-sm font-medium text-gray-900">
+                                                                {test.test_name}
                                                             </div>
-                                                            <div>
-                                                                <div className="text-sm font-medium text-gray-900">
-                                                                    {test.test_name}
-                                                                </div>
-                                                                <div className="text-sm text-gray-500">
-                                                                    {test.unique_students} students
-                                                                </div>
+                                                            <div className="text-sm text-gray-500">
+                                                                {test.unique_students} students
                                                             </div>
                                                         </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                        {test.category}
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                        {test.total_attempts}
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
-                                                        {test.highest_score}%
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
-                                                        {test.average_score}%
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                        {expandedTest === test.test_id ? (
-                                                            <ChevronUp className="w-5 h-5" />
-                                                        ) : (
-                                                            <ChevronDown className="w-5 h-5" />
-                                                        )}
-                                                    </td>
-                                                </motion.tr>
-
-                                                {/* Expanded Row - Student Attempts */}
-                                                <AnimatePresence>
-                                                    {expandedTest === test.test_id && (
-                                                        <motion.tr
-                                                            initial={{ opacity: 0, height: 0 }}
-                                                            animate={{ opacity: 1, height: 'auto' }}
-                                                            exit={{ opacity: 0, height: 0 }}
-                                                            transition={{ duration: 0.3 }}
-                                                        >
-                                                            <td colSpan="6" className="px-6 py-4 bg-gray-50">
-                                                                <div className="space-y-4">
-                                                                    <div className="flex justify-between items-center">
-                                                                        <h4 className="text-lg font-semibold text-gray-800">
-                                                                            Student Attempts ({testAttempts[test.test_id]?.length || 0} students)
-                                                                        </h4>
-                                                                        <div className="flex gap-2">
-                                                                            <button
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    handleExportTestResults(test.test_id, test.test_name, 'excel');
-                                                                                }}
-                                                                                disabled={exportLoading}
-                                                                                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                                                                            >
-                                                                                {exportLoading ? (
-                                                                                    <RefreshCw className="w-4 h-4 animate-spin" />
-                                                                                ) : (
-                                                                                    <FileSpreadsheet className="w-4 h-4" />
-                                                                                )}
-                                                                                Export Excel
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    handleExportTestResults(test.test_id, test.test_name, 'csv');
-                                                                                }}
-                                                                                disabled={exportLoading}
-                                                                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                                                                            >
-                                                                                {exportLoading ? (
-                                                                                    <RefreshCw className="w-4 h-4 animate-spin" />
-                                                                                ) : (
-                                                                                    <Download className="w-4 h-4" />
-                                                                                )}
-                                                                                Export CSV
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-
-                                                                    {testAttempts[test.test_id]?.length === 0 ? (
-                                                                        <div className="text-center py-8">
-                                                                            <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                                                                            <h3 className="text-lg font-medium text-gray-900 mb-2">No attempts found</h3>
-                                                                            <p className="text-gray-500">No students have attempted this test yet.</p>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="overflow-x-auto">
-                                                                            <table className="w-full">
-                                                                                <thead className="bg-white border-b border-gray-200">
-                                                                                    <tr>
-                                                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                                                            Student Name
-                                                                                        </th>
-                                                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                                                            Email
-                                                                                        </th>
-                                                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                                                            Campus
-                                                                                        </th>
-                                                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                                                            Course
-                                                                                        </th>
-                                                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                                                            Batch
-                                                                                        </th>
-                                                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                                                            Total Questions
-                                                                                        </th>
-                                                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                                                            Correct Answers
-                                                                                        </th>
-                                                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                                                            Score
-                                                                                        </th>
-                                                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                                                            Attempts
-                                                                                        </th>
-                                                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                                                            Latest Attempt
-                                                                                        </th>
-                                                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                                                            Actions
-                                                                                        </th>
-                                                                                    </tr>
-                                                                                </thead>
-                                                                                <tbody className="bg-white divide-y divide-gray-200">
-                                                                                    {testAttempts[test.test_id]?.map((student, studentIndex) => (
-                                                                                        <motion.tr
-                                                                                            key={student.student_id}
-                                                                                            initial={{ opacity: 0, x: -20 }}
-                                                                                            animate={{ opacity: 1, x: 0 }}
-                                                                                            transition={{ delay: studentIndex * 0.05 }}
-                                                                                            className="hover:bg-gray-50 cursor-pointer"
-                                                                                            onClick={() => handleStudentClick(student.student_id, test.test_id)}
-                                                                                        >
-                                                                                            <td className="px-4 py-3 whitespace-nowrap">
-                                                                                                <div className="flex items-center">
-                                                                                                    <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-sm mr-3">
-                                                                                                        {student.student_name?.charAt(0)?.toUpperCase() || 'S'}
-                                                                                                    </div>
-                                                                                                    <div className="text-sm font-medium text-gray-900">
-                                                                                                        {student.student_name}
-                                                                                                    </div>
-                                                                                                </div>
-                                                                                            </td>
-                                                                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                                                                                                {student.student_email}
-                                                                                            </td>
-                                                                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                                                                                                {student.campus_name}
-                                                                                            </td>
-                                                                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                                                                                                {student.course_name}
-                                                                                            </td>
-                                                                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                                                                                                {student.batch_name}
-                                                                                            </td>
-                                                                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                                                                                                {student.total_questions}
-                                                                                            </td>
-                                                                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                                                                                                {student.correct_answers}
-                                                                                            </td>
-                                                                                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-green-600">
-                                                                                                {student.highest_score.toFixed(1)}%
-                                                                                            </td>
-                                                                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                                                                                                {student.attempts_count}
-                                                                                            </td>
-                                                                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                                                                                                {student.latest_attempt ? new Date(student.latest_attempt).toLocaleDateString() : 'N/A'}
-                                                                                            </td>
-                                                                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                                                                                                <Eye className="w-4 h-4" />
-                                                                                            </td>
-                                                                                        </motion.tr>
-                                                                                    ))}
-                                                                                </tbody>
-                                                                            </table>
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            </td>
-                                                        </motion.tr>
-                                                    )}
-                                                </AnimatePresence>
-                                            </React.Fragment>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                    {test.category}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                    {test.total_attempts}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
+                                                    {test.highest_score}%
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
+                                                    {test.average_score}%
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    <Eye className="w-5 h-5" />
+                                                </td>
+                                            </motion.tr>
                                         ))
                                     )}
                                 </tbody>
                             </table>
                         </div>
                     </div>
+                        </>
+                    )}
                 </motion.div>
             </main>
 

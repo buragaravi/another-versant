@@ -468,7 +468,7 @@ const TestListView = ({ tests, loading, setView, onViewTest, onDeleteTest, onTes
         </div>
         <div className="flex space-x-3">
           <button
-            onClick={"testing just"}
+            onClick={onTestEmail}
             className="inline-flex items-center justify-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-orange-500 hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-transform transform hover:scale-105"
           >
             🔧 Fix Audio URLs
@@ -2331,8 +2331,9 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
       let topicId = testData.topic_id || selectedTopic;
 
       if (testData.module.startsWith('CRT_')) {
-        // For CRT modules, use the module_id directly as level_id
-        levelId = testData.module;
+        // For CRT modules, don't set level_id unless it's specifically needed
+        // The backend will handle CRT modules without level_id
+        levelId = null;
         subcategory = null;
       } else if (testData.module === 'GRAMMAR') {
         // For Grammar, use level as level_id (since level contains the grammar category)
@@ -2344,7 +2345,7 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
         subcategory = null;
       }
 
-      console.log('Fetching questions for:', {
+      console.log('Fetching questions for CRT module:', {
         module_id: testData.module,
         level_id: levelId,
         subcategory: subcategory,
@@ -2352,7 +2353,8 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
         count: count,
         page: page,
         original_level: testData.level,
-        original_subcategory: testData.subcategory
+        original_subcategory: testData.subcategory,
+        isCRT: testData.module.startsWith('CRT_')
       });
 
       // Use the new bulk selection endpoint
@@ -2822,8 +2824,9 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
         let levelId = testData.level;
 
         if (testData.module.startsWith('CRT_')) {
-          // For CRT modules, use the module_id directly as level_id
-          levelId = testData.module;
+          // For CRT modules, don't set level_id unless it's specifically needed
+          // The backend will handle CRT modules without level_id
+          levelId = null;
         }
 
         const payload = {
@@ -2838,6 +2841,9 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
         if (response.data.success) {
           setLocalQuestionCount(response.data.available_count);
           console.log('Question count response:', response.data);
+          console.log('Available count for CRT module:', response.data.available_count);
+        } else {
+          console.error('Question count failed:', response.data.message);
         }
       } catch (error) {
         console.error('Error fetching question count:', error);

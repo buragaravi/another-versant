@@ -30,6 +30,7 @@ const OnlineExamTaking = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingQuestionId, setRecordingQuestionId] = useState(null);
   const [audioURLs, setAudioURLs] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     const fetchExam = async () => {
@@ -135,6 +136,7 @@ const OnlineExamTaking = () => {
   // Auto-submit when time runs out (only if timer is active and properly initialized)
   useEffect(() => {
     if (isTimerActive && timeRemaining <= 0 && examDuration > 0 && !autoSubmitted) {
+      console.log('Auto-submitting due to time expiration');
       setAutoSubmitted(true);
       handleSubmit();
     }
@@ -214,7 +216,13 @@ const OnlineExamTaking = () => {
           
           // Auto-submit when time runs out
           if (newTime <= 0) {
-            console.log('Time expired, auto-submitting...');
+            console.log('Time expired, auto-submitting...', {
+              newTime,
+              isTimerActive,
+              examDuration,
+              autoSubmitted,
+              questionsLength: questions.length
+            });
             setIsTimerActive(false);
             setAutoSubmitted(true);
             handleSubmit();
@@ -288,6 +296,14 @@ const OnlineExamTaking = () => {
 
   const handleSubmit = async () => {
     try {
+      // Prevent multiple submissions
+      if (isSubmitting || autoSubmitted) {
+        console.log('Submission already in progress, skipping...');
+        return;
+      }
+
+      setIsSubmitting(true);
+
       // Stop the timer
       setIsTimerActive(false);
       if (timerRef.current) {
@@ -302,25 +318,25 @@ const OnlineExamTaking = () => {
       
       if (isListeningModule) {
         // Submit using FormData for listening modules with audio recordings
-        console.log('Submitting listening module with audio recordings');
+        console.log('Submitting listening module with audio recordings to online listening endpoint');
         const formData = new FormData();
         formData.append('test_id', examId);
         Object.entries(answers).forEach(([qid, ans]) => {
-          formData.append(`answer_${qid}`, ans);
+          formData.append(`question_${qid}`, ans);
         });
         Object.entries(recordings).forEach(([qid, blob]) => {
-          formData.append(`question_${qid}`, blob, `answer_${qid}.wav`);
+          formData.append(`question_${qid}`, blob, `answer_${qid}.webm`);
         });
         
-        const res = await api.post('/student/submit-practice-test', formData, {
+        const res = await api.post('/test-management/submit-online-listening-test', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         
         if (res.data.success) {
-          success('Exam submitted successfully!');
+          success('Online listening exam submitted successfully!');
           navigate('/student/history');
         } else {
-          showError(res.data.message || 'Failed to submit your answers.');
+          showError(res.data.message || 'Failed to submit your online listening exam.');
         }
       } else if (assignmentId) {
         // Submit using random assignment endpoint
@@ -369,6 +385,8 @@ const OnlineExamTaking = () => {
       }
     } catch (err) {
       showError(err.response?.data?.message || 'Failed to submit your answers. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -832,7 +850,7 @@ const OnlineExamTaking = () => {
                     {currentQuestionIndex === questions.length - 1 ? (
                       <motion.button
                         onClick={handleSubmit}
-                        disabled={Object.keys({...answers, ...recordings}).length !== questions.length || autoSubmitted}
+                        disabled={Object.keys({...answers, ...recordings}).length !== questions.length || autoSubmitted || isSubmitting}
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         className={`px-8 py-3 border-2 border-transparent text-sm font-medium rounded-2xl shadow-lg text-white flex items-center transition-all duration-300 ${
@@ -841,7 +859,7 @@ const OnlineExamTaking = () => {
                             : 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600'
                         } disabled:bg-gradient-to-r disabled:from-gray-400 disabled:to-gray-500`}
                       >
-                        {autoSubmitted ? 'Auto-Submitting...' : 'Submit Exam'}
+                        {isSubmitting ? 'Submitting...' : autoSubmitted ? 'Auto-Submitting...' : 'Submit Exam'}
                         <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>

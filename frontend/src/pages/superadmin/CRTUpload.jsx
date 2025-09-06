@@ -7,21 +7,21 @@ import api from '../../services/api';
 
 const CRT_MODULES = [
   { 
-    id: 'APTITUDE', 
+    id: 'CRT_APTITUDE', 
     name: 'Aptitude', 
     color: 'from-blue-500 to-blue-600',
     icon: '🧮',
     description: 'Upload aptitude questions covering numerical, verbal, and logical reasoning'
   },
   { 
-    id: 'REASONING', 
+    id: 'CRT_REASONING', 
     name: 'Reasoning', 
     color: 'from-green-500 to-green-600',
     icon: '🧩',
     description: 'Upload reasoning questions including analytical and critical thinking'
   },
   { 
-    id: 'TECHNICAL', 
+    id: 'CRT_TECHNICAL', 
     name: 'Technical', 
     color: 'from-purple-500 to-purple-600',
     icon: '⚙️',
@@ -66,18 +66,28 @@ const CRTUpload = () => {
     }
   }, [selectedModule]);
 
+  // Fetch topics when viewMode changes to 'topics'
+  useEffect(() => {
+    if (viewMode === 'topics') {
+      fetchTopicsForModule();
+    }
+  }, [viewMode]);
+
   const fetchTopicsForModule = async () => {
     try {
+      console.log('Fetching topics - viewMode:', viewMode, 'selectedModule:', selectedModule);
       const response = await api.get('/test-management/crt-topics');
       if (response.data.success) {
         if (viewMode === 'topics' && !selectedModule) {
-          // Show all topics when accessed from main page
+          // Show all topics when accessed from main page - group by module
+          console.log('Setting all topics:', response.data.data.length);
           setTopics(response.data.data);
         } else {
           // Filter topics for the selected module
           const moduleTopics = response.data.data.filter(topic => 
-            topic.module_id === `CRT_${selectedModule}`
+            topic.module_id === selectedModule
           );
+          console.log('Setting module topics:', moduleTopics.length);
           setTopics(moduleTopics);
         }
       }
@@ -86,8 +96,8 @@ const CRTUpload = () => {
     }
   };
 
-  const handleCreateTopic = async () => {
-    if (!selectedModule || !newTopicName.trim()) {
+  const handleCreateTopic = async (moduleId = selectedModule) => {
+    if (!moduleId || !newTopicName.trim()) {
       toast.error('Please select a module and enter a topic name');
       return;
     }
@@ -95,7 +105,7 @@ const CRTUpload = () => {
     try {
       const response = await api.post('/test-management/crt-topics', {
         topic_name: newTopicName.trim(),
-        module_id: `CRT_${selectedModule}`
+        module_id: moduleId
       });
 
       if (response.data.success) {
@@ -183,9 +193,33 @@ const CRTUpload = () => {
   };
 
   const handleBackToUpload = () => {
-    setViewMode('upload');
+    if (!selectedModule) {
+      // If we're in "all topics" view, go back to modules
+      setCurrentStep('modules');
+      setViewMode('upload');
+    } else {
+      // If we're in module-specific view, go back to upload
+      setViewMode('upload');
+    }
     setSelectedTopicForView(null);
     setTopicQuestions([]);
+  };
+
+  // Group topics by module for section-wise display
+  const groupTopicsByModule = (topics) => {
+    const grouped = {
+      'CRT_APTITUDE': [],
+      'CRT_REASONING': [],
+      'CRT_TECHNICAL': []
+    };
+    
+    topics.forEach(topic => {
+      if (grouped[topic.module_id]) {
+        grouped[topic.module_id].push(topic);
+      }
+    });
+    
+    return grouped;
   };
 
   useEffect(() => {
@@ -212,19 +246,61 @@ const CRTUpload = () => {
         const crtFiles = response.data.data.filter(file => 
           file.module_id === 'CRT' || file.module_id?.startsWith('CRT_')
         );
-        setUploadedFiles(crtFiles);
+        
+        // Fetch topic names for files that have topic_id
+        const filesWithTopicNames = await Promise.all(
+          crtFiles.map(async (file) => {
+            if (file.topic_id) {
+              try {
+                const topicResponse = await api.get(`/test-management/crt-topics/${file.topic_id}`);
+                if (topicResponse.data.success) {
+                  file.topic_name = topicResponse.data.data.topic_name;
+                }
+              } catch (error) {
+                console.error('Error fetching topic name:', error);
+                file.topic_name = 'Unknown Topic';
+              }
+            } else {
+              file.topic_name = 'No Topic';
+            }
+            
+            // Add module display name
+            const moduleConfig = CRT_MODULES.find(m => m.id === file.module_id);
+            file.module_name = moduleConfig ? moduleConfig.name : file.module_id;
+            
+            return file;
+          })
+        );
+        
+        setUploadedFiles(filesWithTopicNames);
       }
     } catch (error) {
       console.error('Error fetching uploaded files:', error);
     }
   };
 
-  const fetchFileQuestions = async (fileId) => {
+  const fetchFileQuestions = async (fileId, moduleId, topicId) => {
     try {
-      const response = await api.get(`/test-management/uploaded-files/${fileId}/questions`);
+      console.log('Fetching questions for file ID:', fileId, 'module:', moduleId, 'topic:', topicId);
+      
+      // Build URL with query parameters
+      let url = `/test-management/uploaded-files/${fileId}/questions`;
+      const params = new URLSearchParams();
+      if (moduleId) params.append('module_id', moduleId);
+      if (topicId) params.append('topic_id', topicId);
+      if (params.toString()) {
+        url += `?${params.toString()}`;
+      }
+      
+      const response = await api.get(url);
+      console.log('File questions response:', response.data);
       if (response.data.success) {
         setFileQuestions(response.data.data);
         setShowFileDetails(true);
+        console.log('Questions loaded:', response.data.data.length);
+      } else {
+        console.error('Failed to fetch file questions:', response.data.message);
+        toast.error(response.data.message || 'Failed to fetch file questions');
       }
     } catch (error) {
       console.error('Error fetching file questions:', error);
@@ -266,7 +342,7 @@ const CRTUpload = () => {
   const handleViewQuestions = (file) => {
     setSelectedFile(file);
     setCurrentStep('questions');
-    fetchFileQuestions(file._id);
+    fetchFileQuestions(file._id, file.module_id, file.topic_id);
   };
 
   const handleBackToModules = () => {
@@ -289,7 +365,7 @@ const CRTUpload = () => {
   const downloadTemplate = () => {
     let templateData;
     
-    if (selectedModule === 'TECHNICAL') {
+    if (selectedModule === 'CRT_TECHNICAL') {
       templateData = [
         {
           QuestionTitle: 'Perfect Number',
@@ -381,12 +457,22 @@ const CRTUpload = () => {
       }
     }
 
+    // Validate file type
+    const allowedTypes = ['text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+    const fileExtension = file.name.toLowerCase().split('.').pop();
+    const allowedExtensions = ['csv', 'xlsx', 'xls'];
+    
+    if (!allowedExtensions.includes(fileExtension)) {
+      toast.error('Please upload a CSV or Excel file (.csv, .xlsx, .xls)');
+      return;
+    }
+
     setLoading(true);
     try {
       let questions = [];
       
       // Parse the file based on module type
-      if (selectedModule === 'TECHNICAL') {
+      if (selectedModule === 'CRT_TECHNICAL') {
         questions = await parseTechnicalFile(file);
       } else {
         questions = await parseMCQFile(file);
@@ -412,8 +498,8 @@ const CRTUpload = () => {
       } else {
         // Send questions to general CRT endpoint
         const payload = {
-          module_id: `CRT_${selectedModule}`,
-          level_id: `CRT_${selectedModule}`, // For CRT modules, use module_id as level_id
+          module_id: selectedModule, // selectedModule is already CRT_APTITUDE, CRT_REASONING, or CRT_TECHNICAL
+          level_id: selectedModule, // For CRT modules, use module_id as level_id
           questions: questions,
           topic_id: selectedTopic || null // Include topic_id if selected
         };
@@ -463,7 +549,7 @@ const CRTUpload = () => {
                   testCases: row.Input,
                   expectedOutput: row.ExpectedOutput,
                   language: row.Language || 'python',
-                  questionType: 'compiler_integrated',
+                  questionType: 'technical',
                   testCaseId: row.TestCaseID,
                   // For compatibility with existing system
                   optionA: 'A',
@@ -491,7 +577,7 @@ const CRTUpload = () => {
               testCases: row.TestCases || row.testCases || '',
               expectedOutput: row.ExpectedOutput || row.expectedOutput || row.ExpectedOu || '',
               language: row.Language || row.language || 'python',
-                  questionType: 'compiler_integrated',
+                  questionType: 'technical',
                   // For compatibility with existing system
               optionA: 'A',
               optionB: 'B',
@@ -519,7 +605,7 @@ const CRTUpload = () => {
                   testCases: row.Input,
                   expectedOutput: row.ExpectedOutput,
                   language: row.Language || 'python',
-                  questionType: 'compiler_integrated',
+                  questionType: 'technical',
                   testCaseId: row.TestCaseID,
                   // For compatibility with existing system
                   optionA: 'A',
@@ -547,7 +633,7 @@ const CRTUpload = () => {
               testCases: row.TestCases || row.testCases || '',
               expectedOutput: row.ExpectedOutput || row.expectedOutput || row.ExpectedOu || '',
               language: row.Language || row.language || 'python',
-                  questionType: 'compiler_integrated',
+                  questionType: 'technical',
                   // For compatibility with existing system
               optionA: 'A',
               optionB: 'B',
@@ -563,7 +649,7 @@ const CRTUpload = () => {
             if (!q || !q.question) return false;
             
             // Check based on question type
-            if (q.questionType === 'compiler_integrated') {
+            if (q.questionType === 'technical') {
               return q.testCases && q.expectedOutput && q.language;
             } else if (q.questionType === 'mcq') {
               return q.optionA && q.optionB && q.optionC && q.optionD && q.answer;
@@ -657,7 +743,7 @@ const CRTUpload = () => {
         if (currentStep === 'upload' && selectedModule) {
           fetchExistingQuestionsForModule(selectedModule);
         } else if (currentStep === 'questions' && selectedFile) {
-          fetchFileQuestions(selectedFile._id);
+          fetchFileQuestions(selectedFile._id, selectedFile.module_id, selectedFile.topic_id);
         }
       }
     } catch (error) {
@@ -679,7 +765,7 @@ const CRTUpload = () => {
         if (currentStep === 'upload' && selectedModule) {
           fetchExistingQuestionsForModule(selectedModule);
         } else if (currentStep === 'questions' && selectedFile) {
-          fetchFileQuestions(selectedFile._id);
+          fetchFileQuestions(selectedFile._id, selectedFile.module_id, selectedFile.topic_id);
         }
       }
     } catch (error) {
@@ -699,6 +785,8 @@ const CRTUpload = () => {
         setShowAddQuestion(false);
         if (currentStep === 'upload' && selectedModule) {
           fetchExistingQuestionsForModule(selectedModule);
+        } else if (currentStep === 'questions' && selectedFile) {
+          fetchFileQuestions(selectedFile._id, selectedFile.module_id, selectedFile.topic_id);
         }
       }
     } catch (error) {
@@ -723,9 +811,11 @@ const CRTUpload = () => {
         <div className="mt-6">
           <button
             onClick={() => {
-              setSelectedModule('APTITUDE'); // Default module for topic management
+              console.log('Manage All Topics clicked');
+              setSelectedModule(null); // Clear selected module to show all topics
               setCurrentStep('upload');
               setViewMode('topics');
+              // fetchTopicsForModule will be called by useEffect
             }}
             className="bg-purple-500 text-white px-6 py-3 rounded-md hover:bg-purple-600 transition-colors mr-4"
           >
@@ -765,9 +855,22 @@ const CRTUpload = () => {
             {uploadedFiles.map((file) => (
               <div key={file._id} className="bg-white rounded-lg shadow-md p-4 border border-gray-200">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-900">{file.filename}</span>
-                  <span className="text-xs text-gray-500">{new Date(file.upload_date).toLocaleDateString()}</span>
+                  <span className="text-sm font-medium text-gray-900">{file.file_name || file.filename}</span>
+                  <span className="text-xs text-gray-500">{new Date(file.uploaded_at || file.upload_date).toLocaleDateString()}</span>
                 </div>
+                
+                {/* Module and Topic Information */}
+                <div className="mb-2">
+                  <div className="flex items-center space-x-2 mb-1">
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      {file.module_name || file.module_id}
+                    </span>
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      {file.topic_name || 'No Topic'}
+                    </span>
+                  </div>
+                </div>
+                
                 <p className="text-xs text-gray-600 mb-3">{file.question_count || 0} questions</p>
                 <button
                   onClick={() => handleViewQuestions(file)}
@@ -797,7 +900,10 @@ const CRTUpload = () => {
         </div>
         <div className="flex space-x-3">
           <button
-            onClick={() => setViewMode('topics')}
+            onClick={() => {
+              setViewMode('topics');
+              fetchTopicsForModule(); // Fetch topics for this specific module
+            }}
             className="bg-purple-500 text-white px-4 py-2 rounded-md hover:bg-purple-600 transition-colors"
           >
             Manage Topics
@@ -860,7 +966,7 @@ const CRTUpload = () => {
           </button>
           <p className="text-sm text-gray-600">
             Download the CSV template to see the required format for uploading questions.
-            {selectedModule === 'TECHNICAL' && (
+            {selectedModule === 'CRT_TECHNICAL' && (
               <span className="block mt-1">
                 <strong>Compiler-integrated format:</strong> QuestionTitle, ProblemStatement, TestCaseID, Input, ExpectedOutput, Language<br/>
                 <strong>MCQ format:</strong> Question, A, B, C, D, Answer
@@ -931,7 +1037,7 @@ const CRTUpload = () => {
               </div>
               <p className="text-gray-900 mb-2">{question.question}</p>
               
-              {selectedModule === 'TECHNICAL' ? (
+              {selectedModule === 'CRT_TECHNICAL' ? (
                 <div className="space-y-2 text-sm">
                   <div className="p-2 bg-gray-50 rounded border">
                     <strong>Test Cases:</strong>
@@ -954,7 +1060,7 @@ const CRTUpload = () => {
                 </div>
               )}
               
-              {selectedModule !== 'TECHNICAL' && (
+              {selectedModule !== 'CRT_TECHNICAL' && (
                 <div className="mt-2 text-sm font-medium text-green-600">
                   Answer: {question.answer}
                 </div>
@@ -976,7 +1082,18 @@ const CRTUpload = () => {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">File Questions</h1>
-          <p className="text-gray-600">{selectedFile?.filename}</p>
+          <p className="text-gray-600">{selectedFile?.file_name || selectedFile?.filename}</p>
+          <div className="flex items-center space-x-4 mt-2">
+            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+              {selectedFile?.module_name || selectedFile?.module_id}
+            </span>
+            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+              {selectedFile?.topic_name || 'No Topic'}
+            </span>
+            <span className="text-sm text-gray-500">
+              {fileQuestions.length} questions
+            </span>
+          </div>
         </div>
         <button
           onClick={handleBackToModules}
@@ -998,169 +1115,204 @@ const CRTUpload = () => {
           />
         </div>
 
-        <div className="space-y-4">
-          {fileQuestions.map((question, index) => (
-            <div key={question._id || index} className="border border-gray-200 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-900">Question {index + 1}</span>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => handleEditQuestion(question)}
-                    className="text-blue-500 hover:text-blue-700 text-sm"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDeleteQuestion(question._id)}
-                    className="text-red-500 hover:text-red-700 text-sm"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-              <p className="text-gray-900 mb-2">{question.question}</p>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>A: {question.optionA}</div>
-                <div>B: {question.optionB}</div>
-                <div>C: {question.optionC}</div>
-                <div>D: {question.optionD}</div>
-              </div>
-              <div className="mt-2 text-sm font-medium text-green-600">
-                Answer: {question.answer}
-              </div>
+        {fileQuestions.length === 0 ? (
+          <div className="text-center py-8">
+            <div className="text-6xl mb-4">📝</div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No Questions Found</h3>
+            <p className="text-gray-600 mb-4">This file doesn't contain any questions or there was an error loading them.</p>
+            <div className="text-sm text-gray-500">
+              <p>File ID: {selectedFile?._id}</p>
+              <p>Module: {selectedFile?.module_id}</p>
+              <p>Topic: {selectedFile?.topic_id || 'None'}</p>
+              <p>Module Name: {selectedFile?.module_name}</p>
+              <p>Topic Name: {selectedFile?.topic_name || 'No Topic'}</p>
             </div>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {fileQuestions.map((question, index) => (
+              <div key={question._id || index} className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-900">Question {index + 1}</span>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => handleEditQuestion(question)}
+                      className="text-blue-500 hover:text-blue-700 text-sm"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteQuestion(question._id)}
+                      className="text-red-500 hover:text-red-700 text-sm"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+                <p className="text-gray-900 mb-2">{question.question}</p>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>A: {question.optionA}</div>
+                  <div>B: {question.optionB}</div>
+                  <div>C: {question.optionC}</div>
+                  <div>D: {question.optionD}</div>
+                </div>
+                <div className="mt-2 text-sm font-medium text-green-600">
+                  Answer: {question.answer}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </motion.div>
   );
 
-  const renderTopicsView = () => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="space-y-6"
-    >
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Topic Management</h1>
-          <p className="text-gray-600">
-            {selectedModule 
-              ? `Module: ${CRT_MODULES.find(m => m.id === selectedModule)?.name}`
-              : 'All CRT Modules'
-            }
-          </p>
-        </div>
-        <div className="flex space-x-3">
-          <button
-            onClick={() => setShowCreateTopicModal(true)}
-            className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors"
-          >
-            Create New Topic
-          </button>
-          <button
-            onClick={handleBackToUpload}
-            className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition-colors"
-          >
-            Back to Upload
-          </button>
-        </div>
-      </div>
+  const renderTopicsView = () => {
+    const groupedTopics = selectedModule ? { [selectedModule]: topics } : groupTopicsByModule(topics);
+    const hasAnyTopics = Object.values(groupedTopics).some(moduleTopics => moduleTopics.length > 0);
 
-      {topics.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-md p-8 text-center">
-          <div className="text-6xl mb-4">📚</div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">No Topics Created Yet</h3>
-          <p className="text-gray-600 mb-4">Create your first topic to start organizing questions</p>
-          <button
-            onClick={() => setShowCreateTopicModal(true)}
-            className="bg-blue-500 text-white px-6 py-3 rounded-md hover:bg-blue-600 transition-colors"
-          >
-            Create First Topic
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {topics.map((topic) => (
-            <motion.div
-              key={topic._id}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 cursor-pointer transition-all duration-300 hover:shadow-xl"
-              onClick={() => handleViewTopicQuestions(topic)}
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="space-y-6"
+      >
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Topic Management</h1>
+            <p className="text-gray-600">
+              {selectedModule 
+                ? `Module: ${CRT_MODULES.find(m => m.id === selectedModule)?.name}`
+                : 'All CRT Modules'
+              }
+            </p>
+          </div>
+          <div className="flex space-x-3">
+            <button
+              onClick={() => setShowCreateTopicModal(true)}
+              className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors"
             >
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-white text-lg font-semibold">
-                  {topic.topic_name.charAt(0).toUpperCase()}
-                </div>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingTopic(topic);
-                      setNewTopicName(topic.topic_name);
-                      setShowEditTopicModal(true);
-                    }}
-                    className="text-blue-500 hover:text-blue-700 text-sm p-1"
-                  >
-                    ✏️
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteTopic(topic._id);
-                    }}
-                    className="text-red-500 hover:text-red-700 text-sm p-1"
-                  >
-                    🗑️
-                  </button>
-                </div>
-              </div>
-              
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">{topic.topic_name}</h3>
-              <p className="text-sm text-gray-600 mb-3">
-                {topic.description || 'No description'}
-                {!selectedModule && (
-                  <span className="block mt-1 text-xs text-blue-600">
-                    Module: {topic.module_id?.replace('CRT_', '') || 'Unknown'}
-                  </span>
-                )}
-              </p>
-              
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">
-                  {topic.question_count || 0} questions
-                </span>
-                <span className="text-green-600 font-medium">
-                  {topic.completion_percentage || 0}% complete
-                </span>
-              </div>
-              
-              <div className="mt-3 w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${topic.completion_percentage || 0}%` }}
-                ></div>
-              </div>
-              
-              <div className="mt-4 text-center">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleViewTopicQuestions(topic);
-                  }}
-                  className="w-full bg-blue-500 text-white py-2 px-4 rounded-md text-sm hover:bg-blue-600 transition-colors"
-                >
-                  View Questions
-                </button>
-              </div>
-            </motion.div>
-          ))}
+              Create New Topic
+            </button>
+            <button
+              onClick={handleBackToUpload}
+              className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition-colors"
+            >
+              {!selectedModule ? 'Back to Modules' : 'Back to Upload'}
+            </button>
+          </div>
         </div>
-      )}
-    </motion.div>
-  );
+
+        {!hasAnyTopics ? (
+          <div className="bg-white rounded-lg shadow-md p-8 text-center">
+            <div className="text-6xl mb-4">📚</div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No Topics Created Yet</h3>
+            <p className="text-gray-600 mb-4">Create your first topic to start organizing questions</p>
+            <button
+              onClick={() => setShowCreateTopicModal(true)}
+              className="bg-blue-500 text-white px-6 py-3 rounded-md hover:bg-blue-600 transition-colors"
+            >
+              Create First Topic
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {Object.entries(groupedTopics).map(([moduleId, moduleTopics]) => {
+              if (moduleTopics.length === 0) return null;
+              
+              const moduleInfo = CRT_MODULES.find(m => m.id === moduleId);
+              const totalQuestions = moduleTopics.reduce((sum, topic) => sum + (topic.total_questions || 0), 0);
+              
+              return (
+                <div key={moduleId} className="bg-white rounded-lg shadow-md p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-r from-purple-500 to-purple-600 flex items-center justify-center text-white text-lg font-semibold">
+                        {moduleInfo?.name?.charAt(0) || 'M'}
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-bold text-gray-900">{moduleInfo?.name || moduleId.replace('CRT_', '')}</h2>
+                        <p className="text-gray-600">{moduleTopics.length} topics • {totalQuestions} total questions</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {moduleTopics.map((topic) => (
+                      <motion.div
+                        key={topic._id}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="bg-gray-50 rounded-xl border border-gray-200 p-4 cursor-pointer transition-all duration-300 hover:shadow-md hover:border-blue-300"
+                        onClick={() => handleViewTopicQuestions(topic)}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-white text-sm font-semibold">
+                            {topic.topic_name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex space-x-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingTopic(topic);
+                                setNewTopicName(topic.topic_name);
+                                setShowEditTopicModal(true);
+                              }}
+                              className="text-blue-500 hover:text-blue-700 text-xs p-1"
+                              title="Edit topic"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteTopic(topic._id);
+                              }}
+                              className="text-red-500 hover:text-red-700 text-xs p-1"
+                              title="Delete topic"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                        
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">{topic.topic_name}</h3>
+                        <p className="text-sm text-gray-600 mb-3">
+                          {topic.description || 'No description provided'}
+                        </p>
+                        
+                        <div className="flex items-center justify-between text-sm mb-3">
+                          <span className="text-gray-700 font-medium">
+                            📝 {topic.total_questions || 0} questions
+                          </span>
+                          <span className="text-green-600 font-medium">
+                            ✅ {topic.used_questions || 0} used
+                          </span>
+                        </div>
+                        
+                        <div className="mt-3 text-center">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewTopicQuestions(topic);
+                            }}
+                            className="w-full bg-blue-500 text-white py-2 px-3 rounded-md text-sm hover:bg-blue-600 transition-colors"
+                          >
+                            View Questions
+                          </button>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </motion.div>
+    );
+  };
 
   const renderTopicQuestionsView = () => (
     <motion.div
@@ -1241,7 +1393,7 @@ const CRTUpload = () => {
                 </div>
                 <p className="text-gray-900 mb-2">{question.question}</p>
                 
-                {selectedModule === 'TECHNICAL' ? (
+                {selectedModule === 'CRT_TECHNICAL' ? (
                   <div className="space-y-2 text-sm">
                     <div className="p-2 bg-gray-50 rounded border">
                       <strong>Test Cases:</strong>
@@ -1264,7 +1416,7 @@ const CRTUpload = () => {
                   </div>
                 )}
                 
-                {selectedModule !== 'TECHNICAL' && (
+                {selectedModule !== 'CRT_TECHNICAL' && (
                   <div className="mt-2 text-sm font-medium text-green-600">
                     Answer: {question.answer}
                   </div>
@@ -1286,6 +1438,7 @@ const CRTUpload = () => {
             question={editingQuestion}
             onSave={handleSaveEdit}
             onCancel={() => setEditingQuestion(null)}
+            selectedModule={selectedModule}
           />
         </div>
       </div>
@@ -1349,7 +1502,7 @@ const CRTUpload = () => {
   );
 };
 
-const EditQuestionForm = ({ question, onSave, onCancel }) => {
+const EditQuestionForm = ({ question, onSave, onCancel, selectedModule }) => {
   const [formData, setFormData] = useState({
     question: question.question || '',
     optionA: question.optionA || '',
@@ -1427,7 +1580,7 @@ const EditQuestionForm = ({ question, onSave, onCancel }) => {
         </div>
       </div>
 
-      {selectedModule === 'TECHNICAL' ? (
+                {selectedModule === 'CRT_TECHNICAL' ? (
         <>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Test Cases (one per line)</label>
@@ -1582,7 +1735,7 @@ const AddQuestionForm = ({ onSave, onCancel, selectedModule }) => {
         </div>
       </div>
 
-      {selectedModule === 'TECHNICAL' ? (
+                {selectedModule === 'CRT_TECHNICAL' ? (
         <>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Test Cases (one per line)</label>
@@ -1664,11 +1817,12 @@ const CreateTopicModal = ({ isOpen, onClose, onCreate, topicName, setTopicName, 
   const [isChecking, setIsChecking] = useState(false);
   const [isDuplicate, setIsDuplicate] = useState(false);
   const [existingTopic, setExistingTopic] = useState(null);
+  const [selectedModuleForTopic, setSelectedModuleForTopic] = useState(selectedModule || 'CRT_APTITUDE');
 
   // Check for duplicate topic name in real-time
   useEffect(() => {
     const checkDuplicateTopic = async () => {
-      if (!topicName.trim() || !selectedModule) {
+      if (!topicName.trim() || !selectedModuleForTopic) {
         setIsDuplicate(false);
         setExistingTopic(null);
         return;
@@ -1680,7 +1834,7 @@ const CreateTopicModal = ({ isOpen, onClose, onCreate, topicName, setTopicName, 
         if (response.data.success) {
           const duplicate = response.data.data.find(topic => 
             topic.topic_name.toLowerCase() === topicName.trim().toLowerCase() &&
-            topic.module_id === `CRT_${selectedModule}`
+            topic.module_id === selectedModuleForTopic
           );
           
           if (duplicate) {
@@ -1703,7 +1857,7 @@ const CreateTopicModal = ({ isOpen, onClose, onCreate, topicName, setTopicName, 
     // Debounce the check to avoid too many API calls
     const timeoutId = setTimeout(checkDuplicateTopic, 500);
     return () => clearTimeout(timeoutId);
-  }, [topicName, selectedModule]);
+  }, [topicName, selectedModuleForTopic]);
 
   if (!isOpen) return null;
 
@@ -1712,6 +1866,22 @@ const CreateTopicModal = ({ isOpen, onClose, onCreate, topicName, setTopicName, 
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Create New Topic</h3>
         <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Module
+            </label>
+            <select
+              value={selectedModuleForTopic}
+              onChange={(e) => setSelectedModuleForTopic(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {CRT_MODULES.map((module) => (
+                <option key={module.id} value={module.id}>
+                  {module.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Topic Name
@@ -1758,7 +1928,7 @@ const CreateTopicModal = ({ isOpen, onClose, onCreate, topicName, setTopicName, 
               Cancel
             </button>
             <button
-              onClick={onCreate}
+              onClick={() => onCreate(selectedModuleForTopic)}
               disabled={isDuplicate || isChecking || !topicName.trim()}
               className={`px-4 py-2 text-sm font-medium border border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${
                 isDuplicate || isChecking || !topicName.trim()

@@ -33,8 +33,8 @@ def create_mcq_test():
         if not all([test_name, test_type, module_id, campus_id, course_ids, batch_ids]):
             return jsonify({'success': False, 'message': 'Missing required fields'}), 400
 
-        # Validate MCQ modules
-        mcq_modules = ['GRAMMAR', 'VOCABULARY', 'READING']
+        # Validate MCQ modules (including CRT Aptitude and Reasoning)
+        mcq_modules = ['GRAMMAR', 'VOCABULARY', 'READING', 'CRT_APTITUDE', 'CRT_REASONING']
         if module_id not in mcq_modules:
             return jsonify({'success': False, 'message': f'Invalid module for MCQ test: {module_id}'}), 400
 
@@ -133,8 +133,8 @@ def get_mcq_test(test_id):
         if not test:
             return jsonify({'success': False, 'message': 'Test not found'}), 404
 
-        # Validate it's an MCQ test
-        mcq_modules = ['GRAMMAR', 'VOCABULARY', 'READING']
+        # Validate it's an MCQ test (including CRT Aptitude and Reasoning)
+        mcq_modules = ['GRAMMAR', 'VOCABULARY', 'READING', 'CRT_APTITUDE', 'CRT_REASONING']
         if test.get('module_id') not in mcq_modules:
             return jsonify({'success': False, 'message': 'Not an MCQ test'}), 400
 

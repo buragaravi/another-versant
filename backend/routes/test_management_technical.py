@@ -32,10 +32,9 @@ def create_technical_test():
         if not all([test_name, test_type, module_id, campus_id, course_ids, batch_ids]):
             return jsonify({'success': False, 'message': 'Missing required fields'}), 400
 
-        # Validate CRT modules
-        crt_modules = ['CRT_APTITUDE', 'CRT_REASONING', 'CRT_TECHNICAL']
-        if module_id not in crt_modules and level_id != 'TECHNICAL':
-            return jsonify({'success': False, 'message': f'Invalid module for CRT test: {module_id}'}), 400
+        # Validate technical modules (only CRT_TECHNICAL)
+        if module_id != 'CRT_TECHNICAL' and level_id != 'TECHNICAL':
+            return jsonify({'success': False, 'message': f'Invalid module for technical test: {module_id}'}), 400
 
         # Check if test name already exists (case-insensitive)
         existing_test = mongo_db.tests.find_one({'name': {'$regex': f'^{test_name}$', '$options': 'i'}})
@@ -147,7 +146,7 @@ def get_technical_test(test_id):
         if not test:
             return jsonify({'success': False, 'message': 'Test not found'}), 404
 
-        # Validate it's a technical test
+        # Validate it's a technical test (only CRT_TECHNICAL)
         if test.get('module_id') != 'CRT_TECHNICAL' and test.get('level_id') != 'TECHNICAL':
             return jsonify({'success': False, 'message': 'Not a technical test'}), 400
 
