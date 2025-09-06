@@ -1,0 +1,233 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light;
+  color: #5d4037;
+  background-color: #FFF8E1;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+  margin-bottom: 2rem;
+  background-color: #FFF8E1;
+  color: #5d4037;
+}
+
+#root {
+  width: 100%;
+  margin: 0 auto;
+  text-align: center;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Loading animation */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Fade in animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+/* Slide up animation */
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+/* Custom styles for react-multi-select-component */
+.multi-select {
+    --rmsc-main: #4f46e5; /* Indigo-600 */
+    --rmsc-hover: #f1f5f9; /* Slate-100 */
+    --rmsc-selected: #e0e7ff; /* Indigo-100 */
+    --rmsc-border: #d1d5db; /* Gray-300 */
+    --rmsc-gray: #6b7280; /* Gray-500 */
+    --rmsc-bg: #ffffff; /* White */
+    --rmsc-h: 42px; /* Match form inputs */
+}
+
+.multi-select .dropdown-container {
+    border-radius: var(--rmsc-radius);
+    border: 1px solid var(--rmsc-border);
+}
+
+.multi-select .dropdown-heading {
+    height: var(--rmsc-h);
+    padding: 0 0.75rem;
+    color: #1f2937; /* gray-800 */
+}
+
+.multi-select .dropdown-heading .gray,
+.multi-select .dropdown-heading .dropdown-heading-value span[title="Select"] {
+    color: var(--rmsc-gray) !important;
+}
+
+.multi-select .dropdown-content {
+    border-radius: var(--rmsc-radius);
+    border: 1px solid var(--rmsc-border);
+    margin-top: 0.25rem;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+.multi-select .dropdown-content .search {
+    margin: 0.5rem;
+}
+
+.multi-select .dropdown-content .search input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--rmsc-radius);
+    border: 1px solid var(--rmsc-border);
+    outline: none;
+}
+.multi-select .dropdown-content .search input:focus {
+    border-color: var(--rmsc-main);
+    box-shadow: 0 0 0 2px #c7d2fe;
+}
+
+.multi-select .dropdown-content ul, .multi-select .dropdown-content li {
+    list-style: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.multi-select .item-renderer {
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.multi-select .item-renderer input[type="checkbox"] {
+    display: none;
+}
+
+.multi-select .item-renderer span {
+    color: #111827 !important; /* gray-900 */
+    font-size: 0.875rem; /* text-sm */
+}
+
+.multi-select .item-renderer:hover {
+    background-color: var(--rmsc-hover);
+}
+
+.multi-select .item-renderer.selected {
+    background-color: var(--rmsc-selected) !important;
+    color: var(--rmsc-main) !important;
+    font-weight: 500;
+}
+
+.multi-select .item-renderer.selected span {
+    color: var(--rmsc-main) !important;
+}
+
+/* Ensure dropdown panel text is readable */
+.multi-select .dropdown-content .dropdown-item {
+    color: #111827; /* Gray-900 */
+}
+.multi-select .dropdown-content .dropdown-item:hover {
+    background-color: var(--rmsc-hover);
+}
+
+.multi-select .dropdown-content .dropdown-item.selected {
+    background-color: var(--rmsc-selected);
+    color: #312e81; /* Indigo-900 */
+    font-weight: 600;
+}
+
+/* Custom Item Renderer Fixes */
+.item-renderer {
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+.item-renderer:hover {
+    background-color: #f1f5f9; /* Slate-100 */
+}
+.item-renderer.selected {
+    background-color: #e0e7ff; /* Indigo-100 */
+}
+.item-renderer .text-sm {
+    color: #111827; /* Gray-900, ensures text is always dark */
+}
+.item-renderer.selected .text-sm {
+    color: #312e81; /* Indigo-900, for selected items */
+    font-weight: 600;
+}
+
+/* Fix for the selected value text color in the main input */
+.multi-select .dropdown-heading .dropdown-heading-value {
+    color: #111827 !important; /* text-gray-900 */
+}
+
+/* Ensure the placeholder text is also visible */
+.multi-select .dropdown-heading .dropdown-heading-value .gray-500 {
+    color: #6b7280 !important; /* text-gray-500 */
+}
+
+/* Add some margin to the bottom of the page */
+body {
+    margin-bottom: 2rem;
+} 

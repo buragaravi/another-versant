@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: staysync-config
+  namespace: staysync
+data:
+  # Flask Configuration
+  FLASK_ENV: "production"
+  FLASK_DEBUG: "false"
+  
+  # CORS Configuration
+  CORS_ORIGINS: "https://staysync.pydahsoft.in,https://crt.pydahsoft.in"
+  ALLOW_ALL_CORS: "false"
+  
+  # Redis Configuration
+  REDIS_URL: "redis://staysync-redis:6379/0"
+  
+  # AWS Configuration
+  AWS_REGION: "us-east-1"
+  
+  # JWT Configuration
+  JWT_ACCESS_TOKEN_EXPIRES: "3600"
+  JWT_REFRESH_TOKEN_EXPIRES: "86400"

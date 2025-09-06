@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: staysync-backend
+  namespace: staysync
+  labels:
+    app: staysync-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: staysync-backend
+  template:
+    metadata:
+      labels:
+        app: staysync-backend
+    spec:
+      containers:
+      - name: backend
+        image: staysync-backend:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: staysync-secrets
+              key: mongodb-uri
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: staysync-secrets
+              key: jwt-secret-key
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: staysync-secrets
+              key: aws-access-key-id
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: staysync-secrets
+              key: aws-secret-access-key
+        - name: AWS_S3_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: staysync-secrets
+              key: aws-s3-bucket
+        - name: BREVO_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: staysync-secrets
+              key: brevo-api-key
+        envFrom:
+        - configMapRef:
+            name: staysync-config
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 12
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: staysync-backend
+  namespace: staysync
+  labels:
+    app: staysync-backend
+spec:
+  selector:
+    app: staysync-backend
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: staysync-backend-hpa
+  namespace: staysync
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: staysync-backend
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

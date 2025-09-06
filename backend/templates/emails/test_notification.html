@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>New Module/Test Assigned</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f8fafc; color: #222; }
+    .container { background: #fff; border-radius: 8px; padding: 32px; max-width: 600px; margin: 32px auto; box-shadow: 0 2px 8px #e0e7ef; }
+    .header { font-size: 1.5em; color: #2563eb; font-weight: bold; margin-bottom: 16px; }
+    .section { margin-bottom: 18px; }
+    .label { color: #64748b; font-weight: 500; }
+    .value { color: #22223b; font-weight: 600; }
+    .highlight { color: #059669; font-weight: bold; }
+    .footer { margin-top: 32px; color: #64748b; font-size: 0.95em; }
+    .details-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    .details-table td { padding: 6px 0; }
+    .details-table .label { width: 40%; }
+    .logo {
+      display: block;
+      margin: 0 auto 24px auto;
+      max-width: 200px;
+      height: auto;
+    }
+    .login-btn {
+      display: inline-block;
+      margin-top: 24px;
+      padding: 12px 28px;
+      background: #2563eb;
+      color: #fff;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: bold;
+      font-size: 1.1em;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="https://static.wixstatic.com/media/bfee2e_7d499a9b2c40442e85bb0fa99e7d5d37~mv2.png/v1/fill/w_203,h_111,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/logo1.png" alt="Study Edge Logo" class="logo" />
+    <div class="header">A New Module/Test Has Been Assigned to You!</div>
+    <div class="section">
+      <span class="label">Test Name:</span> <span class="value">{{ test_name or 'N/A' }}</span>
+    </div>
+    <table class="details-table">
+      <tr>
+        <td class="label">Module:</td>
+        <td class="value">{{ module_display_name or module or module_id or 'N/A' }}</td>
+      </tr>
+      <tr>
+        <td class="label">Level:</td>
+        <td class="value">{{ level_display_name or level or level_id or 'N/A' }}</td>
+      </tr>
+      <tr>
+        <td class="label">Type:</td>
+        <td class="value">{{ test_type or 'N/A' }}</td>
+      </tr>
+      <tr>
+        <td class="label">Total Questions:</td>
+        <td class="value">{{ question_count or 'N/A' }}</td>
+      </tr>
+      {% if is_online %}
+      <tr>
+        <td class="label">Start Date & Time:</td>
+        <td class="value">{{ start_dt or 'N/A' }}</td>
+      </tr>
+      <tr>
+        <td class="label">End Date & Time:</td>
+        <td class="value">{{ end_dt or 'N/A' }}</td>
+      </tr>
+      {% endif %}
+    </table>
+    <div class="section" style="margin-top: 18px;">
+      <span class="highlight">You have been assigned a new module/test. Click the button below to go directly to your test.</span>
+    </div>
+    <div style="text-align:center;">
+      {% if is_online %}
+        <a href="https://pydah-studyedge.vercel.app/login?redirect=/student/online-exams/{{ test_id }}" class="login-btn">Go to Online Test</a>
+      {% else %}
+        <a href="https://pydah-studyedge.vercel.app/login?redirect=/student/practice-modules/{{ test_id }}" class="login-btn">Go to Practice Test</a>
+      {% endif %}
+    </div>
+    <div class="footer">
+      If you have any questions, please contact your campus administrator.<br>
+      <br>
+      Good luck!<br>
+      <b>Study Edge Team</b>
+    </div>
+  </div>
+</body>
+</html> 

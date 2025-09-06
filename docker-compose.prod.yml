@@ -1,0 +1,119 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:6.0
+    container_name: staysync-mongodb-prod
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - staysync-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # Redis for caching and sessions
+  redis:
+    image: redis:7-alpine
+    container_name: staysync-redis-prod
+    restart: always
+    volumes:
+      - redis_data:/data
+    networks:
+      - staysync-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: staysync-backend-prod
+    restart: always
+    environment:
+      # Database
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/${MONGO_DATABASE}?authSource=admin
+      
+      # JWT
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      
+      # AWS S3
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
+      AWS_REGION: ${AWS_REGION}
+      
+      # Email Service
+      BREVO_API_KEY: ${BREVO_API_KEY}
+      
+      # CORS
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      ALLOW_ALL_CORS: "false"
+      
+      # Flask
+      FLASK_ENV: production
+      FLASK_DEBUG: "false"
+      
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - staysync-network
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: staysync-frontend-prod
+    restart: always
+    environment:
+      VITE_API_URL: ${API_URL}
+    depends_on:
+      - backend
+    networks:
+      - staysync-network
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+volumes:
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  staysync-network:
+    driver: bridge

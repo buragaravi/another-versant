@@ -1,0 +1,52 @@
+name: Deploy to Kubernetes
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    - name: Configure kubectl
+      run: |
+        mkdir -p ~/.kube
+        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+        chmod 600 ~/.kube/config
+
+    - name: Deploy to Kubernetes
+      run: |
+        # Update image tags in Helm values
+        sed -i "s|tag: \".*\"|tag: \"${{ github.sha }}\"|g" helm/staysync/values.yaml
+        
+        # Install/upgrade Helm chart
+        helm upgrade --install staysync ./helm/staysync \
+          --namespace staysync \
+          --create-namespace \
+          --set backend.image.tag=${{ github.sha }} \
+          --set frontend.image.tag=${{ github.sha }} \
+          --set backend.image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend \
+          --set frontend.image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend \
+          --wait --timeout=10m
+
+    - name: Verify deployment
+      run: |
+        kubectl get pods -n staysync
+        kubectl get services -n staysync
+        kubectl get ingress -n staysync
