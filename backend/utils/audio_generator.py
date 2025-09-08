@@ -145,30 +145,170 @@ def calculate_similarity_score(original_text, student_audio_text):
     """Calculate similarity score between original and student audio text"""
     try:
         from difflib import SequenceMatcher
+        import re
         
-        # Convert to lowercase for better comparison
-        original_lower = original_text.lower()
-        student_lower = student_audio_text.lower()
+        # Clean and normalize text
+        def clean_text(text):
+            # Remove extra whitespace and punctuation for comparison
+            text = re.sub(r'[^\w\s]', '', text.lower())
+            text = re.sub(r'\s+', ' ', text).strip()
+            return text
         
-        # Calculate similarity using SequenceMatcher
-        similarity = SequenceMatcher(None, original_lower, student_lower).ratio()
+        original_clean = clean_text(original_text)
+        student_clean = clean_text(student_audio_text)
+        
+        # Calculate character-level similarity using SequenceMatcher
+        char_similarity = SequenceMatcher(None, original_clean, student_clean).ratio()
         
         # Calculate word-level accuracy
-        original_words = set(original_lower.split())
-        student_words = set(student_lower.split())
+        original_words = original_clean.split()
+        student_words = student_clean.split()
         
         if not original_words:
             return 0.0
         
-        word_accuracy = len(original_words.intersection(student_words)) / len(original_words)
+        # Word-by-word comparison
+        correct_words = 0
+        total_words = len(original_words)
         
-        # Combine similarity and word accuracy
-        final_score = (similarity * 0.7) + (word_accuracy * 0.3)
+        for i, orig_word in enumerate(original_words):
+            if i < len(student_words) and orig_word == student_words[i]:
+                correct_words += 1
+            elif orig_word in student_words:
+                # Partial credit for words that appear but in wrong position
+                correct_words += 0.5
+        
+        word_accuracy = correct_words / total_words
+        
+        # Calculate word order accuracy
+        word_order_score = 0
+        if len(student_words) > 0:
+            # Check how many words are in the correct position
+            min_length = min(len(original_words), len(student_words))
+            correct_positions = sum(1 for i in range(min_length) if original_words[i] == student_words[i])
+            word_order_score = correct_positions / min_length
+        
+        # Calculate vocabulary coverage
+        original_word_set = set(original_words)
+        student_word_set = set(student_words)
+        vocabulary_coverage = len(original_word_set.intersection(student_word_set)) / len(original_word_set)
+        
+        # Weighted final score
+        final_score = (
+            char_similarity * 0.3 +      # Character-level similarity
+            word_accuracy * 0.4 +        # Word accuracy
+            word_order_score * 0.2 +     # Word order
+            vocabulary_coverage * 0.1    # Vocabulary coverage
+        )
         
         return round(final_score * 100, 2)
     except Exception as e:
         print(f"Error calculating similarity: {str(e)}")
         return 0.0
+
+def calculate_detailed_similarity(original_text, student_audio_text):
+    """Calculate detailed similarity analysis for speaking modules"""
+    try:
+        from difflib import SequenceMatcher
+        import re
+        
+        def clean_text(text):
+            text = re.sub(r'[^\w\s]', '', text.lower())
+            text = re.sub(r'\s+', ' ', text).strip()
+            return text
+        
+        original_clean = clean_text(original_text)
+        student_clean = clean_text(student_audio_text)
+        
+        original_words = original_clean.split()
+        student_words = student_clean.split()
+        
+        # Detailed analysis
+        analysis = {
+            'overall_score': 0,
+            'char_similarity': 0,
+            'word_accuracy': 0,
+            'word_order_score': 0,
+            'vocabulary_coverage': 0,
+            'missing_words': [],
+            'extra_words': [],
+            'mispronounced_words': [],
+            'word_by_word': []
+        }
+        
+        # Character-level similarity
+        analysis['char_similarity'] = SequenceMatcher(None, original_clean, student_clean).ratio() * 100
+        
+        # Word-by-word analysis
+        for i, orig_word in enumerate(original_words):
+            word_analysis = {
+                'position': i,
+                'original': orig_word,
+                'student': student_words[i] if i < len(student_words) else '',
+                'correct': False,
+                'score': 0
+            }
+            
+            if i < len(student_words):
+                if orig_word == student_words[i]:
+                    word_analysis['correct'] = True
+                    word_analysis['score'] = 100
+                else:
+                    # Check for partial matches or similar words
+                    similarity = SequenceMatcher(None, orig_word, student_words[i]).ratio()
+                    word_analysis['score'] = similarity * 100
+                    if similarity < 0.8:
+                        analysis['mispronounced_words'].append({
+                            'original': orig_word,
+                            'student': student_words[i],
+                            'similarity': similarity
+                        })
+            else:
+                analysis['missing_words'].append(orig_word)
+            
+            analysis['word_by_word'].append(word_analysis)
+        
+        # Extra words
+        if len(student_words) > len(original_words):
+            analysis['extra_words'] = student_words[len(original_words):]
+        
+        # Calculate scores
+        correct_words = sum(1 for w in analysis['word_by_word'] if w['correct'])
+        analysis['word_accuracy'] = (correct_words / len(original_words)) * 100 if original_words else 0
+        
+        # Word order score
+        correct_positions = sum(1 for w in analysis['word_by_word'] if w['correct'])
+        analysis['word_order_score'] = (correct_positions / len(original_words)) * 100 if original_words else 0
+        
+        # Vocabulary coverage
+        original_set = set(original_words)
+        student_set = set(student_words)
+        analysis['vocabulary_coverage'] = (len(original_set.intersection(student_set)) / len(original_set)) * 100 if original_set else 0
+        
+        # Overall score (weighted)
+        analysis['overall_score'] = (
+            analysis['char_similarity'] * 0.3 +
+            analysis['word_accuracy'] * 0.4 +
+            analysis['word_order_score'] * 0.2 +
+            analysis['vocabulary_coverage'] * 0.1
+        )
+        
+        return analysis
+        
+    except Exception as e:
+        print(f"Error calculating detailed similarity: {str(e)}")
+        return {
+            'overall_score': 0,
+            'char_similarity': 0,
+            'word_accuracy': 0,
+            'word_order_score': 0,
+            'vocabulary_coverage': 0,
+            'missing_words': [],
+            'extra_words': [],
+            'mispronounced_words': [],
+            'word_by_word': [],
+            'error': str(e)
+        }
 
 def transcribe_audio(audio_file_path):
     """Transcribe audio file to text using speech recognition"""

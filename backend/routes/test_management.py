@@ -43,6 +43,7 @@ from dateutil import tz
 from pymongo import DESCENDING
 from collections import defaultdict
 from utils.email_service import send_email, render_template
+from utils.sms_service import send_test_notification_sms, send_result_notification_sms, check_sms_configuration
 import requests
 import pytz
 from routes.access_control import require_permission
@@ -756,6 +757,24 @@ def notify_students(test_id):
                 
                 current_app.logger.info(f"Email sent to {student['email']}: {email_sent}")
                 
+                # Send SMS notification if mobile number is available
+                sms_sent = False
+                sms_status = 'no_mobile'
+                if student.get('mobile_number'):
+                    try:
+                        sms_result = send_test_notification_sms(
+                            phone_number=student['mobile_number'],
+                            student_name=student['name'],
+                            test_name=test['name'],
+                            test_type=test.get('test_type', 'Online Test')
+                        )
+                        sms_sent = sms_result.get('success', False)
+                        sms_status = 'sent' if sms_sent else 'failed'
+                        current_app.logger.info(f"SMS sent to {student['mobile_number']}: {sms_sent}")
+                    except Exception as sms_error:
+                        current_app.logger.error(f"Failed to send SMS to {student['mobile_number']}: {sms_error}")
+                        sms_status = 'failed'
+                
                 results.append({
                     'student_id': student['student_id'],
                     'name': student['name'],
@@ -763,9 +782,10 @@ def notify_students(test_id):
                     'mobile_number': student.get('mobile_number'),
                     'test_status': 'pending',  # Default to pending, could be enhanced to check actual status
                     'notify_status': 'sent' if email_sent else 'failed',
-                    'sms_status': 'no_mobile',  # Default since SMS is not implemented
+                    'sms_status': sms_status,
                     'email_sent': email_sent,
-                    'status': 'success' if email_sent else 'failed'
+                    'sms_sent': sms_sent,
+                    'status': 'success' if (email_sent or sms_sent) else 'failed'
                 })
             except Exception as e:
                 current_app.logger.error(f"Failed to notify student {student['student_id']}: {e}")
@@ -780,6 +800,7 @@ def notify_students(test_id):
                     'notify_status': 'failed',
                     'sms_status': 'no_mobile',
                     'email_sent': False,
+                    'sms_sent': False,
                     'status': 'failed',
                     'error': str(e)
                 })
@@ -2417,6 +2438,50 @@ def validate_transcript():
         
     except Exception as e:
         current_app.logger.error(f"Error validating transcript: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Failed to validate transcript: {str(e)}'
+        }), 500
+
+@test_management_bp.route('/validate-transcript-detailed', methods=['POST'])
+@jwt_required()
+def validate_transcript_detailed():
+    """Validate student transcript with detailed analysis for speaking modules"""
+    try:
+        data = request.get_json()
+        original_text = data.get('original_text')
+        student_text = data.get('student_text')
+        tolerance = data.get('tolerance', 0.8)
+        
+        if not original_text or not student_text:
+            return jsonify({
+                'success': False,
+                'message': 'Original text and student text are required'
+            }), 400
+        
+        # Import the detailed similarity function
+        from utils.audio_generator import calculate_detailed_similarity
+        
+        # Calculate detailed similarity analysis
+        detailed_analysis = calculate_detailed_similarity(original_text, student_text)
+        
+        # Determine if transcript is valid based on overall score
+        is_valid = detailed_analysis['overall_score'] >= (tolerance * 100)
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'overall_score': detailed_analysis['overall_score'],
+                'is_valid': is_valid,
+                'tolerance': tolerance * 100,
+                'original_text': original_text,
+                'student_text': student_text,
+                'detailed_analysis': detailed_analysis
+            }
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error validating transcript with detailed analysis: {str(e)}")
         return jsonify({
             'success': False,
             'message': f'Failed to validate transcript: {str(e)}'
@@ -4324,6 +4389,56 @@ def test_email_service():
             
     except Exception as e:
         current_app.logger.error(f"Test email endpoint error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@test_management_bp.route('/test-sms-service', methods=['POST'])
+@jwt_required()
+@require_superadmin
+def test_sms_service():
+    """Test SMS service configuration"""
+    try:
+        config_status = check_sms_configuration()
+        
+        if config_status['available']:
+            return jsonify({
+                'success': True,
+                'message': 'SMS service is properly configured',
+                'config': config_status
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'SMS service is not properly configured',
+                'config': config_status
+            }), 400
+            
+    except Exception as e:
+        current_app.logger.error(f"Error testing SMS service: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@test_management_bp.route('/sms-balance', methods=['GET'])
+@jwt_required()
+@require_superadmin
+def get_sms_balance():
+    """Get SMS balance"""
+    try:
+        from utils.sms_service import check_sms_balance
+        
+        balance_result = check_sms_balance()
+        
+        if balance_result['success']:
+            return jsonify({
+                'success': True,
+                'balance': balance_result['balance']
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': balance_result['error']
+            }), 400
+            
+    except Exception as e:
+        current_app.logger.error(f"Error getting SMS balance: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @test_management_bp.route('/fix-audio-urls', methods=['POST'])

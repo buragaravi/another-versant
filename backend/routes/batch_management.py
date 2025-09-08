@@ -10,6 +10,7 @@ from datetime import datetime
 import pytz
 import io
 from utils.email_service import send_email, render_template
+from utils.sms_service import send_credentials_sms
 from config.shared import bcrypt
 from socketio_instance import socketio
 from routes.access_control import require_permission
@@ -778,6 +779,20 @@ def upload_students_to_batch():
                         html_content=html_content
                     )
                     email_sent = True
+                    
+                    # Send SMS with credentials if mobile number is available
+                    sms_sent = False
+                    if mobile_number:
+                        try:
+                            sms_result = send_credentials_sms(
+                                phone_number=mobile_number,
+                                username=username,
+                                password=password
+                            )
+                            sms_sent = sms_result.get('success', False)
+                            current_app.logger.info(f"SMS sent to {mobile_number}: {sms_sent}")
+                        except Exception as sms_error:
+                            current_app.logger.error(f"Failed to send SMS to {mobile_number}: {sms_error}")
                 except Exception as e:
                     email_error = str(e)
                     # Don't add to errors array - just log it
@@ -2324,7 +2339,26 @@ def send_student_credentials(student_id):
             html_content=html_content
         )
         
-        return jsonify({'success': True, 'message': 'Credentials sent successfully'}), 200
+        # Send SMS with credentials if mobile number is available
+        sms_sent = False
+        if student.get('mobile_number'):
+            try:
+                sms_result = send_credentials_sms(
+                    phone_number=student.get('mobile_number'),
+                    username=student.get('username', ''),
+                    password=password
+                )
+                sms_sent = sms_result.get('success', False)
+                current_app.logger.info(f"SMS sent to {student.get('mobile_number')}: {sms_sent}")
+            except Exception as sms_error:
+                current_app.logger.error(f"Failed to send SMS to {student.get('mobile_number')}: {sms_error}")
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Credentials sent successfully',
+            'email_sent': True,
+            'sms_sent': sms_sent
+        }), 200
         
     except Exception as e:
         current_app.logger.error(f"Error sending credentials: {e}")

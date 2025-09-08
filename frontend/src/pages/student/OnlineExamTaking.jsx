@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -31,6 +31,145 @@ const OnlineExamTaking = () => {
   const [recordingQuestionId, setRecordingQuestionId] = useState(null);
   const [audioURLs, setAudioURLs] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Speaking module specific states
+  const [questionHidden, setQuestionHidden] = useState(false);
+  const [questionDisplayTimer, setQuestionDisplayTimer] = useState(null);
+  const [questionDisplayTimeRemaining, setQuestionDisplayTimeRemaining] = useState(0);
+
+  // Handle question hiding for speaking module
+  useEffect(() => {
+    if (exam?.module_id === 'SPEAKING' && questions.length > 0 && currentQuestionIndex < questions.length) {
+      const currentQuestion = questions[currentQuestionIndex];
+      const displayTime = currentQuestion?.display_time || 10; // Default 10 seconds
+      
+      // Reset question visibility for new question
+      setQuestionHidden(false);
+      setQuestionDisplayTimeRemaining(displayTime);
+      
+      // Clear any existing timer
+      if (questionDisplayTimer) {
+        clearInterval(questionDisplayTimer);
+        setQuestionDisplayTimer(null);
+      }
+      
+      // Start countdown timer
+      const timer = setInterval(() => {
+        setQuestionDisplayTimeRemaining(prev => {
+          if (prev <= 1) {
+            setQuestionHidden(true);
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      setQuestionDisplayTimer(timer);
+      
+      // Cleanup timer on unmount or question change
+      return () => {
+        clearInterval(timer);
+      };
+    }
+  }, [currentQuestionIndex, exam?.module_id, questions.length]);
+
+  // Define handleSubmit function before useEffect hooks that use it
+  const handleSubmit = useCallback(async () => {
+    try {
+      // Prevent multiple submissions
+      if (isSubmitting || autoSubmitted) {
+        console.log('Submission already in progress, skipping...');
+        return;
+      }
+
+      setIsSubmitting(true);
+
+      // Stop the timer
+      setIsTimerActive(false);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+
+      const endTime = Date.now();
+      const timeTakenMs = startTime ? endTime - startTime : null;
+
+      // Check if this is a listening module that requires audio submission
+      const isListeningModule = exam?.module_id === 'LISTENING' || exam?.module_id === 'SPEAKING';
+      
+      if (isListeningModule) {
+        // Submit using FormData for listening modules with audio recordings
+        console.log('Submitting listening module with audio recordings to online listening endpoint');
+        const formData = new FormData();
+        formData.append('test_id', examId);
+        Object.entries(answers).forEach(([qid, ans]) => {
+          formData.append(`question_${qid}`, ans);
+        });
+        Object.entries(recordings).forEach(([qid, blob]) => {
+          formData.append(`question_${qid}`, blob, `answer_${qid}.webm`);
+        });
+        
+        const res = await api.post('/test-management/submit-online-listening-test', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        
+        if (res.data.success) {
+          success('Online listening exam submitted successfully!');
+          navigate('/student/history');
+        } else {
+          showError(res.data.message || 'Failed to submit your online listening exam.');
+        }
+      } else if (assignmentId) {
+        // Submit using random assignment endpoint
+        console.log('Submitting via random assignment endpoint with assignment_id:', assignmentId);
+        const payload = {
+          assignment_id: assignmentId,
+          answers: answers,
+          time_taken_ms: timeTakenMs
+        };
+        const res = await api.post(`/student/test/${examId}/submit-random`, payload);
+        if (res.data.success) {
+          success('Exam submitted successfully!');
+          navigate('/student/history');
+        } else {
+          showError(res.data.message || 'Failed to submit your answers.');
+        }
+      } else {
+        // Submit using regular test endpoint (for tests without random questions)
+        console.log('Submitting via regular test endpoint for test_id:', examId);
+        
+        if (!attemptId) {
+          // If we don't have an attempt_id, try to start the test first
+          try {
+            const startRes = await api.post(`/student/tests/${examId}/start`);
+            setAttemptId(startRes.data.data.attempt_id);
+            console.log('Got attempt_id during submit:', startRes.data.data.attempt_id);
+          } catch (startErr) {
+            console.error('Error starting test during submit:', startErr);
+            showError('Failed to start test. Please try again.');
+            return;
+          }
+        }
+        
+        const payload = {
+          attempt_id: attemptId,
+          answers: answers,
+          time_taken_ms: timeTakenMs
+        };
+        const res = await api.post(`/student/tests/${examId}/submit`, payload);
+        if (res.data.success) {
+          success('Exam submitted successfully!');
+          navigate('/student/history');
+        } else {
+          showError(res.data.message || 'Failed to submit your answers.');
+        }
+      }
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to submit your answers. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [isSubmitting, autoSubmitted, startTime, exam?.module_id, examId, answers, recordings, assignmentId, attemptId, success, showError, navigate]);
 
   useEffect(() => {
     const fetchExam = async () => {
@@ -131,7 +270,7 @@ const OnlineExamTaking = () => {
       setAutoSubmitted(true);
       handleSubmit();
     }
-  }, [cheatCount, autoSubmitted]);
+  }, [cheatCount, autoSubmitted, handleSubmit]);
 
   // Auto-submit when time runs out (only if timer is active and properly initialized)
   useEffect(() => {
@@ -140,7 +279,7 @@ const OnlineExamTaking = () => {
       setAutoSubmitted(true);
       handleSubmit();
     }
-  }, [timeRemaining, isTimerActive, examDuration, autoSubmitted]);
+  }, [timeRemaining, isTimerActive, examDuration, autoSubmitted, handleSubmit]);
 
   // Timer persistence - save timer state to localStorage
   useEffect(() => {
@@ -242,7 +381,7 @@ const OnlineExamTaking = () => {
         clearInterval(timerRef.current);
       }
     };
-  }, [isTimerActive, timeRemaining, timerWarning, showError, examDuration]);
+  }, [isTimerActive, timeRemaining, timerWarning, showError, examDuration, autoSubmitted, questions.length, handleSubmit]);
 
   // Format time for display (clean MM:SS format)
   const formatTime = (seconds) => {
@@ -294,101 +433,6 @@ const OnlineExamTaking = () => {
     }
   };
 
-  const handleSubmit = async () => {
-    try {
-      // Prevent multiple submissions
-      if (isSubmitting || autoSubmitted) {
-        console.log('Submission already in progress, skipping...');
-        return;
-      }
-
-      setIsSubmitting(true);
-
-      // Stop the timer
-      setIsTimerActive(false);
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-
-      const endTime = Date.now();
-      const timeTakenMs = startTime ? endTime - startTime : null;
-
-      // Check if this is a listening module that requires audio submission
-      const isListeningModule = exam?.module_id === 'LISTENING' || exam?.module_id === 'SPEAKING';
-      
-      if (isListeningModule) {
-        // Submit using FormData for listening modules with audio recordings
-        console.log('Submitting listening module with audio recordings to online listening endpoint');
-        const formData = new FormData();
-        formData.append('test_id', examId);
-        Object.entries(answers).forEach(([qid, ans]) => {
-          formData.append(`question_${qid}`, ans);
-        });
-        Object.entries(recordings).forEach(([qid, blob]) => {
-          formData.append(`question_${qid}`, blob, `answer_${qid}.webm`);
-        });
-        
-        const res = await api.post('/test-management/submit-online-listening-test', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-        
-        if (res.data.success) {
-          success('Online listening exam submitted successfully!');
-          navigate('/student/history');
-        } else {
-          showError(res.data.message || 'Failed to submit your online listening exam.');
-        }
-      } else if (assignmentId) {
-        // Submit using random assignment endpoint
-        console.log('Submitting via random assignment endpoint with assignment_id:', assignmentId);
-        const payload = {
-          assignment_id: assignmentId,
-          answers: answers,
-          time_taken_ms: timeTakenMs
-        };
-        const res = await api.post(`/student/test/${examId}/submit-random`, payload);
-        if (res.data.success) {
-          success('Exam submitted successfully!');
-          navigate('/student/history');
-        } else {
-          showError(res.data.message || 'Failed to submit your answers.');
-        }
-      } else {
-        // Submit using regular test endpoint (for tests without random questions)
-        console.log('Submitting via regular test endpoint for test_id:', examId);
-        
-        if (!attemptId) {
-          // If we don't have an attempt_id, try to start the test first
-          try {
-            const startRes = await api.post(`/student/tests/${examId}/start`);
-            setAttemptId(startRes.data.data.attempt_id);
-            console.log('Got attempt_id during submit:', startRes.data.data.attempt_id);
-          } catch (startErr) {
-            console.error('Error starting test during submit:', startErr);
-            showError('Failed to start test. Please try again.');
-            return;
-          }
-        }
-        
-        const payload = {
-          attempt_id: attemptId,
-          answers: answers,
-          time_taken_ms: timeTakenMs
-        };
-        const res = await api.post(`/student/tests/${examId}/submit`, payload);
-        if (res.data.success) {
-          success('Exam submitted successfully!');
-          navigate('/student/history');
-        } else {
-          showError(res.data.message || 'Failed to submit your answers.');
-        }
-      }
-    } catch (err) {
-      showError(err.response?.data?.message || 'Failed to submit your answers. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   if (loading) return <LoadingSpinner />;
   if (!exam) return <div className="text-center p-8">Exam not found or unavailable.</div>;
@@ -551,7 +595,34 @@ const OnlineExamTaking = () => {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.4 }}
                   >
-                    {currentQuestion.question}
+                    {exam?.module_id === 'SPEAKING' && !questionHidden ? (
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                          <div className="flex-1">
+                            {currentQuestion.question}
+                          </div>
+                          <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium ml-4">
+                            {questionDisplayTimeRemaining}s
+                          </div>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-blue-600 h-2 rounded-full transition-all duration-1000"
+                            style={{ width: `${(questionDisplayTimeRemaining / (currentQuestion.display_time || 10)) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    ) : exam?.module_id === 'SPEAKING' && questionHidden ? (
+                      <div className="text-center py-8">
+                        <div className="bg-gray-100 rounded-lg p-6">
+                          <div className="text-gray-500 text-4xl mb-2">📝</div>
+                          <div className="text-gray-600 font-medium text-lg">Question Hidden</div>
+                          <div className="text-gray-500 text-sm mt-1">Now record your response from memory</div>
+                        </div>
+                      </div>
+                    ) : (
+                      currentQuestion.question
+                    )}
                   </motion.h3>
 
                   {/* Debug info - remove this in production */}
@@ -636,7 +707,7 @@ const OnlineExamTaking = () => {
                     </motion.div>
                   )}
 
-                  {/* Audio recording interface for listening modules */}
+                  {/* Audio recording interface for listening and speaking modules */}
                   {(currentQuestion.question_type === 'audio' || currentQuestion.audio_url || exam?.module_id === 'LISTENING' || exam?.module_id === 'SPEAKING') && (
                     <motion.div 
                       className="space-y-6"
@@ -645,30 +716,51 @@ const OnlineExamTaking = () => {
                       transition={{ duration: 0.6, delay: 0.5 }}
                     >
                       <div className="text-center">
-                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                          <h4 className="text-lg font-semibold text-yellow-800 mb-2">Instructions for Listening Module:</h4>
-                          <p className="text-yellow-700">
-                            1. Listen to the audio above carefully<br/>
-                            2. Click "Start Recording" to record your response<br/>
-                            3. Speak clearly into your microphone<br/>
-                            4. Click "Stop Recording" when finished<br/>
-                            5. You can also type your response below (optional)
-                          </p>
-                        </div>
+                        {exam?.module_id === 'SPEAKING' ? (
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                            <h4 className="text-lg font-semibold text-blue-800 mb-2">Instructions for Speaking Module:</h4>
+                            <p className="text-blue-700">
+                              1. Read the sentence above carefully<br/>
+                              2. The sentence will disappear after {currentQuestion.display_time || 10} seconds<br/>
+                              3. Click "Start Recording" to record your response<br/>
+                              4. Speak clearly and pronounce each word correctly<br/>
+                              5. Click "Stop Recording" when finished
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                            <h4 className="text-lg font-semibold text-yellow-800 mb-2">Instructions for Listening Module:</h4>
+                            <p className="text-yellow-700">
+                              1. Listen to the audio above carefully<br/>
+                              2. Click "Start Recording" to record your response<br/>
+                              3. Speak clearly into your microphone<br/>
+                              4. Click "Stop Recording" when finished<br/>
+                              5. You can also type your response below (optional)
+                            </p>
+                          </div>
+                        )}
                         
                         {/* Recording Controls */}
                         <div className="flex justify-center space-x-4 mb-6">
                           {!isRecording ? (
                             <motion.button
                               onClick={() => startRecording(currentQuestion.question_id)}
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              className="px-6 py-3 bg-red-500 text-white rounded-2xl font-semibold hover:bg-red-600 transition-all duration-300 shadow-lg flex items-center"
+                              disabled={exam?.module_id === 'SPEAKING' && !questionHidden}
+                              whileHover={{ scale: exam?.module_id === 'SPEAKING' && !questionHidden ? 1 : 1.05 }}
+                              whileTap={{ scale: exam?.module_id === 'SPEAKING' && !questionHidden ? 1 : 0.95 }}
+                              className={`px-6 py-3 rounded-2xl font-semibold transition-all duration-300 shadow-lg flex items-center ${
+                                exam?.module_id === 'SPEAKING' && !questionHidden 
+                                  ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
+                                  : 'bg-red-500 text-white hover:bg-red-600'
+                              }`}
                             >
                               <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
                               </svg>
-                              Start Recording
+                              {exam?.module_id === 'SPEAKING' && !questionHidden 
+                                ? 'Wait for question to hide' 
+                                : 'Start Recording'
+                              }
                             </motion.button>
                           ) : (
                             <motion.button

@@ -239,7 +239,6 @@ def notify_writing_test_students(test_id):
         for student in student_list:
             try:
                 # Send email notification
-                from utils.email_service import send_email, render_template
                 html_content = render_template('test_notification.html', 
                     student_name=student['name'],
                     test_name=test['name'],
@@ -262,6 +261,24 @@ def notify_writing_test_students(test_id):
                     html_content=html_content
                 )
                 
+                # Send SMS notification if mobile number is available
+                sms_sent = False
+                sms_status = 'no_mobile'
+                if student.get('mobile_number'):
+                    try:
+                        sms_result = send_test_notification_sms(
+                            phone_number=student['mobile_number'],
+                            student_name=student['name'],
+                            test_name=test['name'],
+                            test_type='Writing Test'
+                        )
+                        sms_sent = sms_result.get('success', False)
+                        sms_status = 'sent' if sms_sent else 'failed'
+                        current_app.logger.info(f"SMS sent to {student['mobile_number']}: {sms_sent}")
+                    except Exception as sms_error:
+                        current_app.logger.error(f"Failed to send SMS to {student['mobile_number']}: {sms_error}")
+                        sms_status = 'failed'
+                
                 results.append({
                     'student_id': str(student['_id']),
                     'name': student['name'],
@@ -269,9 +286,10 @@ def notify_writing_test_students(test_id):
                     'mobile_number': student.get('mobile_number'),
                     'test_status': 'pending',
                     'notify_status': 'sent' if email_sent else 'failed',
-                    'sms_status': 'no_mobile',
+                    'sms_status': sms_status,
                     'email_sent': email_sent,
-                    'status': 'success' if email_sent else 'failed'
+                    'sms_sent': sms_sent,
+                    'status': 'success' if (email_sent or sms_sent) else 'failed'
                 })
             except Exception as e:
                 current_app.logger.error(f"Failed to notify student {student['_id']}: {e}")
@@ -284,6 +302,7 @@ def notify_writing_test_students(test_id):
                     'notify_status': 'failed',
                     'sms_status': 'no_mobile',
                     'email_sent': False,
+                    'sms_sent': False,
                     'status': 'failed',
                     'error': str(e)
                 })

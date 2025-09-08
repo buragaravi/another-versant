@@ -870,14 +870,10 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
     // Validate transcript for speaking modules
     const validateTranscript = async (originalSentence, studentTranscript, questionId) => {
         try {
-            const response = await api.post('/test-management/validate-transcript', {
-                original_sentence: originalSentence,
-                student_transcript: studentTranscript,
-                validation_config: {
-                    tolerance: 0.8,
-                    checkMismatchedWords: true,
-                    allowPartialMatches: true
-                }
+            const response = await api.post('/test-management/validate-transcript-detailed', {
+                original_text: originalSentence,
+                student_text: studentTranscript,
+                tolerance: 0.8
             });
             
             if (response.data.success) {
@@ -1377,39 +1373,73 @@ const ModuleTakingView = ({ module, onSubmit, onBack }) => {
                         </div>
                     )}
                     
-                    {/* Show validation results for speaking modules */}
+                    {/* Show detailed validation results for speaking modules */}
                     {currentQuestion.module_id === 'SPEAKING' && answers[`${currentQuestion.question_id}_validation`] && (
-                        <div className="w-full max-w-md">
-                            <h4 className="text-sm font-semibold text-gray-700 mb-2">Validation Results:</h4>
-                            <div className="bg-blue-50 p-3 rounded-lg border">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-sm font-medium">Similarity Score:</span>
-                                    <span className={`text-sm font-bold ${
+                        <div className="w-full max-w-2xl">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-2">Detailed Speaking Analysis:</h4>
+                            <div className="bg-blue-50 p-4 rounded-lg border space-y-3">
+                                {/* Overall Score */}
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium">Overall Score:</span>
+                                    <span className={`text-lg font-bold ${
                                         answers[`${currentQuestion.question_id}_validation`].is_valid ? 'text-green-600' : 'text-red-600'
                                     }`}>
-                                        {Math.round(answers[`${currentQuestion.question_id}_validation`].similarity_score * 100)}%
+                                        {Math.round(answers[`${currentQuestion.question_id}_validation`].overall_score)}%
                                     </span>
                                 </div>
                                 
-                                {answers[`${currentQuestion.question_id}_validation`].mismatched_words && (
+                                {/* Detailed Scores */}
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <div className="flex justify-between">
+                                        <span>Word Accuracy:</span>
+                                        <span className="font-medium">{Math.round(answers[`${currentQuestion.question_id}_validation`].detailed_analysis?.word_accuracy || 0)}%</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>Word Order:</span>
+                                        <span className="font-medium">{Math.round(answers[`${currentQuestion.question_id}_validation`].detailed_analysis?.word_order_score || 0)}%</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>Vocabulary:</span>
+                                        <span className="font-medium">{Math.round(answers[`${currentQuestion.question_id}_validation`].detailed_analysis?.vocabulary_coverage || 0)}%</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>Character Match:</span>
+                                        <span className="font-medium">{Math.round(answers[`${currentQuestion.question_id}_validation`].detailed_analysis?.char_similarity || 0)}%</span>
+                                    </div>
+                                </div>
+                                
+                                {/* Missing Words */}
+                                {answers[`${currentQuestion.question_id}_validation`].detailed_analysis?.missing_words?.length > 0 && (
                                     <div className="mt-2">
-                                        <p className="text-xs text-gray-600 mb-1">Mismatched Words:</p>
-                                        {answers[`${currentQuestion.question_id}_validation`]?.mismatched_words?.missing?.length > 0 && (
-                                            <div className="mb-1">
-                                                <span className="text-xs text-red-600">Missing: </span>
-                                                <span className="text-xs text-gray-700">
-                                                    {answers[`${currentQuestion.question_id}_validation`].mismatched_words.missing.join(', ')}
-                                                </span>
-                                            </div>
-                                        )}
-                                        {answers[`${currentQuestion.question_id}_validation`]?.mismatched_words?.extra?.length > 0 && (
-                                            <div>
-                                                <span className="text-xs text-orange-600">Extra: </span>
-                                                <span className="text-xs text-gray-700">
-                                                    {answers[`${currentQuestion.question_id}_validation`].mismatched_words.extra.join(', ')}
-                                                </span>
-                                            </div>
-                                        )}
+                                        <span className="text-xs text-red-600 font-medium">Missing Words: </span>
+                                        <span className="text-xs text-gray-700">
+                                            {answers[`${currentQuestion.question_id}_validation`].detailed_analysis.missing_words.join(', ')}
+                                        </span>
+                                    </div>
+                                )}
+                                
+                                {/* Extra Words */}
+                                {answers[`${currentQuestion.question_id}_validation`].detailed_analysis?.extra_words?.length > 0 && (
+                                    <div className="mt-1">
+                                        <span className="text-xs text-orange-600 font-medium">Extra Words: </span>
+                                        <span className="text-xs text-gray-700">
+                                            {answers[`${currentQuestion.question_id}_validation`].detailed_analysis.extra_words.join(', ')}
+                                        </span>
+                                    </div>
+                                )}
+                                
+                                {/* Mispronounced Words */}
+                                {answers[`${currentQuestion.question_id}_validation`].detailed_analysis?.mispronounced_words?.length > 0 && (
+                                    <div className="mt-2">
+                                        <span className="text-xs text-yellow-600 font-medium">Mispronounced: </span>
+                                        <div className="text-xs text-gray-700 mt-1">
+                                            {answers[`${currentQuestion.question_id}_validation`].detailed_analysis.mispronounced_words.map((word, idx) => (
+                                                <div key={idx} className="flex justify-between">
+                                                    <span>{word.original} → {word.student}</span>
+                                                    <span className="text-gray-500">({Math.round(word.similarity * 100)}%)</span>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                 )}
                             </div>

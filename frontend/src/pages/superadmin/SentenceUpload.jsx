@@ -26,6 +26,12 @@ const SentenceUpload = ({ onUpload, onClose, moduleType = 'LISTENING' }) => {
     checkMismatchedWords: true,
     allowPartialMatches: true
   });
+  
+  // Speaking module specific settings
+  const [speakingSettings, setSpeakingSettings] = useState({
+    display_time: 10, // Default 10 seconds for question display
+    enable_question_hiding: true
+  });
 
   const levels = ['Beginner', 'Intermediate', 'Advanced'];
   
@@ -183,6 +189,7 @@ const SentenceUpload = ({ onUpload, onClose, moduleType = 'LISTENING' }) => {
       // Add transcript validation for Speaking module
       if (moduleType === 'SPEAKING') {
         formData.append('transcript_validation', JSON.stringify(transcriptValidation));
+        formData.append('speaking_settings', JSON.stringify(speakingSettings));
       }
 
       const response = await fetch('/api/superadmin/sentence-upload', {
@@ -421,11 +428,58 @@ const SentenceUpload = ({ onUpload, onClose, moduleType = 'LISTENING' }) => {
         </div>
       )}
 
-      {/* Transcript Validation Settings for Speaking Module */}
+      {/* Speaking Module Settings */}
       {moduleType === 'SPEAKING' && (
-        <div className="mb-6 space-y-4">
-          <h3 className="text-lg font-semibold text-gray-700">Transcript Validation Settings</h3>
-          <div className="space-y-3">
+        <div className="mb-6 space-y-6">
+          <h3 className="text-lg font-semibold text-gray-700">Speaking Module Settings</h3>
+          
+          {/* Question Display Settings */}
+          <div className="bg-pink-50 p-4 rounded-lg border border-pink-200">
+            <h4 className="text-md font-medium text-pink-800 mb-3">Question Display Settings</h4>
+            <div className="space-y-3">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="enableQuestionHiding"
+                  checked={speakingSettings.enable_question_hiding}
+                  onChange={(e) => setSpeakingSettings(prev => ({ ...prev, enable_question_hiding: e.target.checked }))}
+                  className="mr-2"
+                />
+                <label htmlFor="enableQuestionHiding" className="text-sm text-gray-700">
+                  Enable question hiding (questions disappear after time limit)
+                </label>
+              </div>
+              
+              {speakingSettings.enable_question_hiding && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Question Display Time (seconds)
+                  </label>
+                  <input
+                    type="range"
+                    min="5"
+                    max="30"
+                    value={speakingSettings.display_time}
+                    onChange={(e) => setSpeakingSettings(prev => ({ ...prev, display_time: parseInt(e.target.value) }))}
+                    className="w-full h-2 bg-pink-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>5s</span>
+                    <span className="font-medium text-pink-600">{speakingSettings.display_time}s</span>
+                    <span>30s</span>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Students will have {speakingSettings.display_time} seconds to read the question before it disappears
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Transcript Validation Settings */}
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <h4 className="text-md font-medium text-blue-800 mb-3">Transcript Validation Settings</h4>
+            <div className="space-y-3">
             <div className="flex items-center">
               <input
                 type="checkbox"
@@ -486,6 +540,7 @@ const SentenceUpload = ({ onUpload, onClose, moduleType = 'LISTENING' }) => {
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
       )}

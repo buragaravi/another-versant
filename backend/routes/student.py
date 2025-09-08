@@ -54,6 +54,49 @@ def safe_isoformat(date_obj):
         # It's already a string or other type
         return str(date_obj)
 
+def extract_datetime_for_sorting(date_obj):
+    """Extract a datetime object from various date formats for sorting purposes."""
+    if not date_obj:
+        from datetime import datetime
+        return datetime.min
+    
+    if hasattr(date_obj, 'isoformat'):
+        # It's already a datetime object
+        return date_obj
+    elif isinstance(date_obj, dict):
+        # It's a MongoDB date dict, extract the date
+        if '$date' in date_obj:
+            try:
+                from datetime import datetime
+                date_str = date_obj['$date']
+                # Handle different MongoDB date formats
+                if 'T' in date_str:
+                    # ISO format with T
+                    return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                else:
+                    # Just timestamp
+                    return datetime.fromtimestamp(int(date_str) / 1000)
+            except (ValueError, KeyError, TypeError):
+                from datetime import datetime
+                return datetime.min
+        else:
+            from datetime import datetime
+            return datetime.min
+    else:
+        # Try to parse as string
+        try:
+            from datetime import datetime
+            if isinstance(date_obj, str):
+                if 'T' in date_obj:
+                    return datetime.fromisoformat(date_obj.replace('Z', '+00:00'))
+                else:
+                    return datetime.fromtimestamp(int(date_obj) / 1000)
+            else:
+                return datetime.min
+        except (ValueError, TypeError):
+            from datetime import datetime
+            return datetime.min
+
 student_bp = Blueprint('student', __name__)
 
 @student_bp.route('/profile', methods=['GET'])
@@ -1613,7 +1656,7 @@ def get_test_history():
         results = []
         for test_id, test_data in test_groups.items():
             # Sort attempts by date (most recent first)
-            test_data['attempts'].sort(key=lambda x: x.get('end_time') or x.get('submitted_at') or datetime.min, reverse=True)
+            test_data['attempts'].sort(key=lambda x: extract_datetime_for_sorting(x.get('end_time') or x.get('submitted_at')), reverse=True)
             
             # Add test summary data
             latest_attempt = test_data['attempts'][0]
@@ -1626,7 +1669,7 @@ def get_test_history():
             results.append(test_data)
         
         # Sort results by most recent attempt
-        results.sort(key=lambda x: x.get('latest_submitted_at') or datetime.min, reverse=True)
+        results.sort(key=lambda x: extract_datetime_for_sorting(x.get('latest_submitted_at')), reverse=True)
         current_app.logger.info(f"Total test groups: {len(results)}")
         
         # Convert ObjectIds to strings and add module names
@@ -2383,7 +2426,7 @@ def get_progress_summary():
             current_app.logger.warning(f"Error fetching recent activity from student_test_attempts: {e}")
         
         # Sort by date and take top 10
-        recent_activity.sort(key=lambda x: x.get('submitted_at', datetime.min), reverse=True)
+        recent_activity.sort(key=lambda x: extract_datetime_for_sorting(x.get('submitted_at')), reverse=True)
         recent_activity = recent_activity[:10]
         
         for activity in recent_activity:

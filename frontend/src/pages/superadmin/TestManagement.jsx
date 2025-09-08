@@ -386,13 +386,13 @@ const TestManagement = () => {
               <div className="flex items-center space-x-2">
                 <input
                   type="text"
-                  value={`crt.pydasoft.in/student/exam/${createdTestId}`}
+                  value={`crt.pydahsoft.in/student/exam/${createdTestId}`}
                   readOnly
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-md bg-white text-sm font-mono"
                 />
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(`crt.pydasoft.in/student/exam/${createdTestId}`);
+                    navigator.clipboard.writeText(`crt.pydahsoft.in/student/exam/${createdTestId}`);
                     success('URL copied to clipboard!');
                   }}
                   className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
@@ -3559,6 +3559,14 @@ const Step5QuestionUpload = ({ nextStep, prevStep, updateTestData, testData, upl
                         {testData.module === 'LISTENING' && (
                           <div className="mt-2 text-sm">
                             <strong>Audio Status:</strong> 🎵 Audio will be auto-generated for listening test
+                          </div>
+                        )}
+                        {testData.module === 'SPEAKING' && (
+                          <div className="mt-2 text-sm space-y-1">
+                            <div><strong>Question Type:</strong> 🎤 Speaking Practice</div>
+                            <div><strong>Display Time:</strong> {question.display_time || 10} seconds</div>
+                            <div><strong>Question Hiding:</strong> {question.enable_question_hiding ? 'Enabled' : 'Disabled'}</div>
+                            <div><strong>Validation:</strong> {question.transcript_validation?.enabled ? 'Enabled' : 'Disabled'}</div>
                           </div>
                         )}
                       </div>

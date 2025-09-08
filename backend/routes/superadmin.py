@@ -1520,6 +1520,7 @@ def sentence_upload():
         audio_file = request.files.get('audio_file')
         audio_config = request.form.get('audio_config')
         transcript_validation = request.form.get('transcript_validation')
+        speaking_settings = request.form.get('speaking_settings')
         
         if file.filename == '':
             return jsonify({'success': False, 'message': 'No file selected'}), 400
@@ -1631,6 +1632,7 @@ def sentence_upload():
         # Parse configuration
         parsed_audio_config = {}
         parsed_transcript_validation = {}
+        parsed_speaking_settings = {}
         
         if audio_config:
             try:
@@ -1643,6 +1645,12 @@ def sentence_upload():
                 parsed_transcript_validation = json.loads(transcript_validation)
             except:
                 parsed_transcript_validation = {'enabled': True, 'tolerance': 0.8, 'checkMismatchedWords': True, 'allowPartialMatches': True}
+        
+        if speaking_settings:
+            try:
+                parsed_speaking_settings = json.loads(speaking_settings)
+            except:
+                parsed_speaking_settings = {'display_time': 10, 'enable_question_hiding': True}
         
         # Insert sentences into database
         inserted_count = 0
@@ -1671,7 +1679,9 @@ def sentence_upload():
                 if module_id == 'SPEAKING':
                     sentence_data.update({
                         'transcript_validation': parsed_transcript_validation,
-                        'question_type': 'speaking'
+                        'question_type': 'speaking',
+                        'display_time': parsed_speaking_settings.get('display_time', 10),
+                        'enable_question_hiding': parsed_speaking_settings.get('enable_question_hiding', True)
                     })
                 
                 mongo_db.question_bank.insert_one(sentence_data)
@@ -2670,7 +2680,7 @@ def export_results():
                 'Correct Answers',
                 'Submitted At'
             ])
-            
+        
             # Write data
             for result in results:
                 # Extract actual values from MongoDB structures

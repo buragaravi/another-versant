@@ -33,8 +33,6 @@ const ParagraphUpload = ({ moduleName, levelId, onUploadSuccess }) => {
   const [previewParagraphs, setPreviewParagraphs] = useState([]);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
-
-  
   const levelConfig = {
     Beginner: {
       backspaceAllowed: true,
@@ -68,9 +66,44 @@ const ParagraphUpload = ({ moduleName, levelId, onUploadSuccess }) => {
     }
   };
 
+  // Normalize levelId to match levelConfig keys
+  const normalizeLevelId = (id) => {
+    if (!id) return null;
+    
+    // Handle cases like "WRITING_BEGINNER" -> "Beginner"
+    if (typeof id === 'string') {
+      const parts = id.split('_');
+      if (parts.length > 1) {
+        const levelPart = parts[parts.length - 1]; // Get the last part
+        return levelPart.charAt(0).toUpperCase() + levelPart.slice(1).toLowerCase();
+      }
+      // Handle direct level names
+      return id.charAt(0).toUpperCase() + id.slice(1).toLowerCase();
+    }
+    return id;
+  };
+
+  const normalizedLevelId = normalizeLevelId(levelId);
+
+  // Debug logging to help identify levelId issues
+  console.log('ParagraphUpload - original levelId:', levelId, 'type:', typeof levelId);
+  console.log('ParagraphUpload - normalized levelId:', normalizedLevelId);
+  console.log('ParagraphUpload - available levels:', Object.keys(levelConfig));
+  console.log('ParagraphUpload - levelConfig[normalizedLevelId]:', levelConfig[normalizedLevelId]);
+
   // Paragraph validation
   const validateParagraph = (text, level) => {
-    const config = levelConfig[level];
+    const normalizedLevel = normalizeLevelId(level);
+    const config = levelConfig[normalizedLevel];
+    
+    if (!config) {
+      return {
+        isValid: false,
+        errors: [`Level configuration not found for: ${level}`],
+        warnings: []
+      };
+    }
+    
     const characterCount = text.length;
     const wordCount = text.trim().split(/\s+/).length;
     const sentenceCount = text.split(/[.!?]+/).filter(sentence => sentence.trim().length > 0).length;
@@ -260,32 +293,46 @@ Paragraph: Regular physical activity is essential for maintaining good health an
 
       {/* Level Configuration Display */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Level Configuration: {levelId}</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Level Configuration: {normalizedLevelId || levelId}</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {Object.entries(levelConfig[levelId]).map(([key, value]) => {
-            if (typeof value === 'boolean') return null;
-            if (key === 'description' || key === 'color') return null;
-            
-            return (
-              <div key={key} className="text-center p-3 bg-gray-50 rounded-lg">
-                <div className="text-sm font-medium text-gray-700 capitalize">
-                  {key.replace(/([A-Z])/g, ' $1').trim()}
+          {levelConfig[normalizedLevelId] ? (
+            Object.entries(levelConfig[normalizedLevelId]).map(([key, value]) => {
+              if (typeof value === 'boolean') return null;
+              if (key === 'description' || key === 'color') return null;
+              
+              return (
+                <div key={key} className="text-center p-3 bg-gray-50 rounded-lg">
+                  <div className="text-sm font-medium text-gray-700 capitalize">
+                    {key.replace(/([A-Z])/g, ' $1').trim()}
+                  </div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {key.includes('Chars') ? `${value} chars` :
+                     key.includes('Words') ? `${value} words` :
+                     key.includes('Limit') ? `${value} min` :
+                     value}
+                  </div>
                 </div>
-                <div className="text-lg font-bold text-gray-900">
-                  {key.includes('Chars') ? `${value} chars` :
-                   key.includes('Words') ? `${value} words` :
-                   key.includes('Limit') ? `${value} min` :
-                   value}
-                </div>
-              </div>
-            );
-          })}
+              );
+            })
+          ) : (
+            <div className="col-span-full text-center p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <AlertCircle className="h-6 w-6 text-yellow-600 mx-auto mb-2" />
+              <p className="text-yellow-800">
+                Level configuration not found for: <strong>{normalizedLevelId || levelId}</strong>
+              </p>
+              <p className="text-sm text-yellow-600 mt-1">
+                Available levels: {Object.keys(levelConfig).join(', ')}
+              </p>
+            </div>
+          )}
         </div>
-        <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-          <div className="text-sm text-blue-800">
-            <strong>Note:</strong> {levelConfig[levelId].description}
+        {levelConfig[normalizedLevelId] && (
+          <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+            <div className="text-sm text-blue-800">
+              <strong>Note:</strong> {levelConfig[normalizedLevelId].description}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* File Upload Section */}

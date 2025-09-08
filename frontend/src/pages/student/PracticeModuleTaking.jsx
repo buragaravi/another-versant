@@ -25,6 +25,11 @@ const PracticeModuleTaking = () => {
   const [audioURLs, setAudioURLs] = useState({});
   const [result, setResult] = useState(null);
   const navigate = useNavigate();
+  
+  // Speaking module specific states
+  const [questionHidden, setQuestionHidden] = useState(false);
+  const [questionDisplayTimer, setQuestionDisplayTimer] = useState(null);
+  const [questionDisplayTimeRemaining, setQuestionDisplayTimeRemaining] = useState(0);
 
   useEffect(() => {
     const fetchModule = async () => {
@@ -120,6 +125,39 @@ const PracticeModuleTaking = () => {
   if (questions.length === 0) return <div className="text-center p-8">This module has no questions.</div>;
 
   const currentQuestion = questions[currentQuestionIndex];
+  
+  // Handle question hiding for speaking module
+  useEffect(() => {
+    if (module?.module_id === 'SPEAKING' && currentQuestion) {
+      const displayTime = currentQuestion.display_time || 10; // Default 10 seconds
+      setQuestionHidden(false);
+      setQuestionDisplayTimeRemaining(displayTime);
+      
+      // Clear any existing timer
+      if (questionDisplayTimer) {
+        clearInterval(questionDisplayTimer);
+      }
+      
+      // Start countdown timer
+      const timer = setInterval(() => {
+        setQuestionDisplayTimeRemaining(prev => {
+          if (prev <= 1) {
+            setQuestionHidden(true);
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      setQuestionDisplayTimer(timer);
+      
+      // Cleanup timer on unmount or question change
+      return () => {
+        clearInterval(timer);
+      };
+    }
+  }, [currentQuestionIndex, module?.module_id, currentQuestion]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -144,7 +182,34 @@ const PracticeModuleTaking = () => {
                     Your browser does not support the audio element.
                   </audio>
                 )}
-                <p className="text-lg sm:text-xl text-gray-800 mb-8 break-words">{currentQuestion.question}</p>
+                {module?.module_id === 'SPEAKING' && !questionHidden ? (
+                  <div className="space-y-4 mb-8">
+                    <div className="flex justify-between items-center">
+                      <p className="text-lg sm:text-xl text-gray-800 break-words flex-1">
+                        {currentQuestion.question}
+                      </p>
+                      <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium ml-4">
+                        {questionDisplayTimeRemaining}s
+                      </div>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-1000"
+                        style={{ width: `${(questionDisplayTimeRemaining / (currentQuestion.display_time || 10)) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                ) : module?.module_id === 'SPEAKING' && questionHidden ? (
+                  <div className="text-center py-8 mb-8">
+                    <div className="bg-gray-100 rounded-lg p-6">
+                      <div className="text-gray-500 text-4xl mb-2">📝</div>
+                      <div className="text-gray-600 font-medium text-lg">Question Hidden</div>
+                      <div className="text-gray-500 text-sm mt-1">Now record your response from memory</div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-lg sm:text-xl text-gray-800 mb-8 break-words">{currentQuestion.question}</p>
+                )}
               </div>
               {currentQuestion.question_type === 'mcq' && (
                 <div className="space-y-4 max-w-lg mx-auto w-full">
